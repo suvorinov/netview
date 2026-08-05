@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - Логи Squid{% endblock %}
+{% block page_title %}Логи Squid{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<!-- Выбор файла + фильтры -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    <form method="GET" class="space-y-4">
+        <!-- Файл лога -->
+        <div class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[250px]">
+                <label class="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Файл лога</label>
+                <select name="file" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                        onchange="this.form.submit()">
+                    {% for lf in log_files %}
+                    <option value="{{ lf.name }}" {% if log_file == lf.name %}selected{% endif %}>
+                        {{ lf.name }} ({{ lf.size }}{% if lf.compressed %} .gz{% endif %})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- Информация о файле (загружается асинхронно) -->
+        <div id="file-info-container"
+             hx-get="/logs/api/file-info?file={{ log_file }}"
+             hx-trigger="load"
+             hx-swap="innerHTML"
+             hx-indicator="#file-info-loading">
+        </div>
+        <div id="file-info-loading" class="htmx-indicator text-xs text-gray-400 py-1">
+            <i class="fas fa-spinner fa-spin mr-1"></i> Загрузка информации...
+        </div>
+
+        <!-- Фильтры -->
+        <div class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Поиск по URL/домену/IP</label>
+                <input type="text" name="search" value="{{ search }}"
+                       placeholder="Введите запрос..."
+                       class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div class="min-w-[160px]">
+                <label class="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Пользователь</label>
+                <input type="text" name="user" value="{{ user_filter }}"
+                       placeholder="Логин AD..."
+                       class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div class="min-w-[140px]">
+                <label class="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Статус</label>
+                <select name="status" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">Все</option>
+                    <option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>Заблокировано</option>
+                    <option value="allowed" {% if status_filter == 'allowed' %}selected{% endif %}>Разрешено</option>
+                </select>
+            </div>
+            <div class="min-w-[140px]">
+                <label class="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">Сортировка</label>
+                <select name="sort" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="time_desc" {% if sort == 'time_desc' %}selected{% endif %}>Новые первые</option>
+                    <option value="time_asc" {% if sort == 'time_asc' %}selected{% endif %}>Старые первые</option>
+                    <option value="size_desc" {% if sort == 'size_desc' %}selected{% endif %}>По размеру ↓</option>
+                    <option value="size_asc" {% if sort == 'size_asc' %}selected{% endif %}>По размеру ↑</option>
+                </select>
+            </div>
+            <button type="submit"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                <i class="fas fa-search mr-1"></i> Поиск
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Статистика -->
+{% if stats %}
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 text-center">
+        <p class="text-xl font-bold text-blue-600">{{ stats.total_requests|default(0) }}</p>
+        <p class="text-xs text-gray-500">Всего запросов</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 text-center">
+        <p class="text-xl font-bold text-gray-700 dark:text-gray-300">{{ stats.unique_users|default(0) }}</p>
+        <p class="text-xs text-gray-500">Уникальных IP</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 text-center">
+        <p class="text-xl font-bold text-red-600">{{ stats.blocked_requests|default(0) }}</p>
+        <p class="text-xs text-gray-500">Заблокировано</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 text-center">
+        <p class="text-xl font-bold text-green-600">{{ stats.allowed_requests|default(0) }}</p>
+        <p class="text-xs text-gray-500">Разрешено</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 text-center">
+        <p class="text-xl font-bold text-gray-700 dark:text-gray-300">{{ stats.total_traffic_formatted|default('0 B') }}</p>
+        <p class="text-xs text-gray-500">Трафик</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- Таблица записей -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <h3 class="font-semibold">
+            <i class="fas fa-file-alt text-gray-500 mr-2"></i>
+            Записи <span class="text-gray-500 text-sm">({{ pagination.total_records }} всего)</span>
+        </h3>
+        <span class="text-xs text-gray-500">
+            Стр. {{ pagination.page }} / {{ pagination.total_pages }}
+        </span>
+    </div>
+
+    {% if records %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                    <th class="px-3 py-2 text-left">Время</th>
+                    <th class="px-3 py-2 text-left">IP</th>
+                    <th class="px-3 py-2 text-left">Пользователь</th>
+                    <th class="px-3 py-2 text-left">URL</th>
+                    <th class="px-3 py-2 text-left">Домен</th>
+                    <th class="px-3 py-2 text-center">Метод</th>
+                    <th class="px-3 py-2 text-right">Статус</th>
+                    <th class="px-3 py-2 text-right">Размер</th>
+                    <th class="px-3 py-2 text-center">Блок</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for r in records %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 {% if r.is_blocked %}bg-red-50 dark:bg-red-900/20{% endif %}">
+                    <td class="px-3 py-2 whitespace-nowrap">{{ r.timestamp_human }}</td>
+                    <td class="px-3 py-2 font-mono">{{ r.client_ip }}</td>
+                    <td class="px-3 py-2">
+                        {% if r.user %}
+                        {% set username = r.user.split('@')[0] %}
+                        <a href="/users/{{ username }}" class="text-blue-500 hover:underline">{{ r.user }}</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="px-3 py-2 max-w-[250px] truncate" title="{{ r.url }}">{{ r.url }}</td>
+                    <td class="px-3 py-2">{{ r.domain }}</td>
+                    <td class="px-3 py-2 text-center font-mono">{{ r.method }}</td>
+                    <td class="px-3 py-2 text-right font-mono">{{ r.status_code }}</td>
+                    <td class="px-3 py-2 text-right font-mono" title="{{ r.size }} B">{{ r.size|human_size }}</td>
+                    <td class="px-3 py-2 text-center">
+                        {% if r.is_blocked %}
+                        <i class="fas fa-ban text-red-500"></i>
+                        {% else %}
+                        <i class="fas fa-check text-green-500"></i>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Пагинация -->
+    {% if pagination.total_pages > 1 %}
+    <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-center gap-2">
+        {% if pagination.page > 1 %}
+        <a href="?file={{ log_file }}&page={{ pagination.page - 1 }}&search={{ search }}&user={{ user_filter }}&status={{ status_filter }}&sort={{ sort }}"
+           class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        {% endif %}
+
+        {% for p in range(1, pagination.total_pages + 1) %}
+            {% if p == pagination.page %}
+            <span class="px-3 py-1 rounded bg-blue-600 text-white text-sm">{{ p }}</span>
+            {% elif p <= 3 or p > pagination.total_pages - 3 or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+            <a href="?file={{ log_file }}&page={{ p }}&search={{ search }}&user={{ user_filter }}&status={{ status_filter }}&sort={{ sort }}"
+               class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm">
+                {{ p }}
+            </a>
+            {% elif p == 4 or p == pagination.total_pages - 3 %}
+            <span class="px-1 text-gray-400">...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if pagination.page < pagination.total_pages %}
+        <a href="?file={{ log_file }}&page={{ pagination.page + 1 }}&search={{ search }}&user={{ user_filter }}&status={{ status_filter }}&sort={{ sort }}"
+           class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="p-8 text-center text-gray-500">
+        <i class="fas fa-inbox text-4xl mb-3 text-gray-300"></i>
+        <p>Записи не найдены</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

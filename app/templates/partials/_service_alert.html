@@ -1,0 +1,11 @@
+<!-- Баннер недоступности сервисов -->
+{% if unavailable_services %}
+<div class="space-y-2 mb-6">
+    {% for service in unavailable_services %}
+    <div class="px-4 py-3 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-700 flex items-center gap-2 text-sm text-red-800 dark:text-red-200">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Сервис <strong>{{ service }}</strong> недоступен. Данные могут быть неполными или устаревшими.</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

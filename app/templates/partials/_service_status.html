@@ -1,0 +1,34 @@
+<!-- Статус сервиса -->
+{% if status %}
+<div class="p-3 rounded-lg bg-green-100 dark:bg-green-900">
+    <div class="flex items-center gap-2 mb-2">
+        <span class="w-3 h-3 rounded-full bg-green-500"></span>
+        <span class="font-medium text-green-800 dark:text-green-200">Работает</span>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div>
+            <span class="text-gray-500 dark:text-gray-400">Всего принтеров:</span>
+            <span class="font-medium">{{ status.total_printers }}</span>
+        </div>
+        <div>
+            <span class="text-gray-500 dark:text-gray-400">Онлайн:</span>
+            <span class="font-medium text-green-600 dark:text-green-400">{{ status.online_printers }}</span>
+        </div>
+        <div>
+            <span class="text-gray-500 dark:text-gray-400">Оффлайн:</span>
+            <span class="font-medium text-red-600 dark:text-red-400">{{ status.offline_printers }}</span>
+        </div>
+        <div>
+            <span class="text-gray-500 dark:text-gray-400">Низкий тонер:</span>
+            <span class="font-medium text-yellow-600 dark:text-yellow-400">{{ status.low_toner_printers }}</span>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="p-3 rounded-lg bg-red-100 dark:bg-red-900">
+    <div class="flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-red-500"></span>
+        <span class="font-medium text-red-800 dark:text-red-200">Недоступен</span>
+    </div>
+</div>
+{% endif %}

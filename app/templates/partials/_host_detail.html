@@ -1,0 +1,137 @@
+<!-- Детальная информация о хосте (модальное окно) -->
+{% if host %}
+<div class="space-y-4">
+    <!-- Заголовок -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-server text-2xl text-gray-400"></i>
+            <div>
+                <h3 class="text-xl font-bold">{{ host.hostname }}</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ host.ip_address or '—' }}</p>
+            </div>
+        </div>
+        <span class="px-3 py-1 text-sm rounded-full {% if host.status == 'ONLINE' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+            {{ host.status }}
+        </span>
+    </div>
+
+    <!-- Баннер о простое -->
+    {% if host.status == 'OFFLINE' %}
+    <div class="bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg p-3 flex items-start gap-3">
+        <i class="fas fa-power-off text-red-500 mt-1"></i>
+        <div>
+            <p class="font-semibold text-red-700 dark:text-red-300">Хост не в сети</p>
+            <p class="text-sm text-red-600 dark:text-red-400">
+                Последний контакт: {{ host.last_seen|datetime }} ({{ host.last_seen|time_ago }} назад)
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ОС и пользователь -->
+    <div class="grid grid-cols-2 gap-4">
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Операционная система</p>
+            <p class="font-medium flex items-center gap-2">
+                <i class="fab fa-windows text-blue-500"></i>
+                {{ host.os_name }}
+            </p>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Текущий пользователь</p>
+            <p class="font-medium flex items-center gap-2">
+                <i class="fas fa-user text-gray-400"></i>
+                {{ host.current_user }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Ресурсы -->
+    <div class="grid grid-cols-3 gap-4">
+        <!-- CPU -->
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">CPU</p>
+            <div class="flex items-center gap-2">
+                <div class="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                    <div class="h-3 rounded-full {% if host.status == 'OFFLINE' %}bg-gray-400{% elif host.cpu_percent > 80 %}bg-red-500{% elif host.cpu_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                         style="width: {{ host.cpu_percent }}%"></div>
+                </div>
+                <span class="text-sm font-medium w-12 text-right">{{ "%.1f"|format(host.cpu_percent) }}%</span>
+            </div>
+        </div>
+
+        <!-- RAM -->
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">RAM</p>
+            <div class="flex items-center gap-2">
+                <div class="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                    <div class="h-3 rounded-full {% if host.status == 'OFFLINE' %}bg-gray-400{% elif host.ram_percent > 80 %}bg-red-500{% elif host.ram_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                         style="width: {{ host.ram_percent }}%"></div>
+                </div>
+                <span class="text-sm font-medium w-12 text-right">{{ "%.1f"|format(host.ram_percent) }}%</span>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {{ "%.1f"|format(host.ram_available_gb) }}/{{ "%.1f"|format(host.ram_total_gb) }} ГБ
+            </p>
+        </div>
+
+        <!-- Disk -->
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Диск</p>
+            <div class="flex items-center gap-2">
+                <div class="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                    <div class="h-3 rounded-full {% if host.status == 'OFFLINE' %}bg-gray-400{% elif host.disk_percent > 80 %}bg-red-500{% elif host.disk_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                         style="width: {{ host.disk_percent }}%"></div>
+                </div>
+                <span class="text-sm font-medium w-12 text-right">{{ "%.1f"|format(host.disk_percent) }}%</span>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {{ "%.1f"|format(host.disk_free_gb) }}/{{ "%.1f"|format(host.disk_total_gb) }} ГБ
+            </p>
+        </div>
+    </div>
+    {% if host.status == 'OFFLINE' %}
+    <p class="text-xs text-gray-500 dark:text-gray-400">
+        Показатели ресурсов — на момент последнего контакта ({{ host.last_seen|datetime }})
+    </p>
+    {% endif %}
+
+    <!-- Дополнительная информация -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <p class="text-2xl font-bold {% if host.status == 'OFFLINE' %}text-gray-400{% else %}text-blue-600 dark:text-blue-400{% endif %}">{{ host.uptime_seconds // 86400 }}д {{ (host.uptime_seconds % 86400) // 3600 }}ч</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Аптайм</p>
+        </div>
+        <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <p class="text-2xl font-bold {% if host.status == 'OFFLINE' %}text-gray-400{% else %}text-purple-600 dark:text-purple-400{% endif %}">{{ host.process_count }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Процессов</p>
+        </div>
+        <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <p class="text-2xl font-bold {% if host.status == 'OFFLINE' %}text-gray-400{% else %}text-green-600 dark:text-green-400{% endif %}">{{ "%.1f"|format(host.bytes_sent_mb) }} МБ</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Отправлено</p>
+        </div>
+        <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <p class="text-2xl font-bold {% if host.status == 'OFFLINE' %}text-gray-400{% else %}text-yellow-600 dark:text-yellow-400{% endif %}">{{ "%.1f"|format(host.bytes_recv_mb) }} МБ</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Получено</p>
+        </div>
+    </div>
+
+    {% if host.swap_percent is defined and host.swap_percent > 0 %}
+    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Swap</p>
+        <div class="flex items-center gap-2">
+            <div class="flex-1 bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                <div class="h-3 rounded-full {% if host.status == 'OFFLINE' %}bg-gray-400{% elif host.swap_percent > 50 %}bg-red-500{% else %}bg-yellow-500{% endif %}"
+                     style="width: {{ host.swap_percent }}%"></div>
+            </div>
+            <span class="text-sm font-medium w-12 text-right">{{ "%.1f"|format(host.swap_percent) }}%</span>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="text-center py-8 text-gray-500 dark:text-gray-400">
+    <i class="fas fa-exclamation-circle text-4xl mb-2"></i>
+    <p>Не удалось загрузить информацию о хосте</p>
+</div>
+{% endif %}

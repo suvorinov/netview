@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NetView{% endblock %}</title>
+
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: '#1e293b',
+                        sidebarHover: '#334155',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        /* Стили для переключения темы */
+        .sidebar-link:hover { background-color: #334155; }
+        .sidebar-link.active { background-color: #3b82f6; }
+        /* HTMX indicator */
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+        .htmx-request.htmx-indicator { display: inline-block; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+    <div class="flex min-h-screen">
+
+        <!-- SideBar -->
+        <aside class="w-64 bg-sidebar text-white flex-shrink-0">
+            <div class="p-4">
+                <h1 class="text-xl font-bold flex items-center gap-2">
+                    <i class="fas fa-network-wired"></i>
+                    NetView
+                </h1>
+            </div>
+            <nav class="mt-2">
+                <a href="/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt w-5"></i>
+                    Dashboard
+                </a>
+                <a href="/printers/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'printer' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-print w-5"></i>
+                    Принтеры
+                </a>
+                <a href="/hosts/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'host' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-server w-5"></i>
+                    Хосты
+                </a>
+                <div class="border-t border-gray-600 my-2 mx-4"></div>
+                <a href="/users/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'user' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-users w-5"></i>
+                    Пользователи
+                </a>
+                <a href="/logs/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'log' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-file-alt w-5"></i>
+                    Логи Squid
+                </a>
+                <a href="/stoplist/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'stoplist' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-ban w-5"></i>
+                    Стоп-лист
+                </a>
+                <a href="/netcerber/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'netcerber' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-shield-alt w-5"></i>
+                    NetCerber
+                </a>
+                <div class="border-t border-gray-600 my-2 mx-4"></div>
+                <a href="/settings/" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-lg mx-2 {% if 'setting' in request.endpoint|default('') %}active{% endif %}">
+                    <i class="fas fa-cog w-5"></i>
+                    Настройки
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Основной контент -->
+        <main class="flex-1 p-6">
+            <!-- Верхняя панель -->
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">{% block page_title %}Dashboard{% endblock %}</h2>
+                <button onclick="document.documentElement.classList.toggle('dark')" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700">
+                    <i class="fas fa-moon dark:hidden"></i>
+                    <i class="fas fa-sun hidden dark:inline"></i>
+                </button>
+            </div>
+
+            <!-- Контент страницы -->
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

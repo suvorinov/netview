@@ -1,0 +1,5 @@
+<!-- Результат операции настроек -->
+<div class="p-2 rounded text-sm {% if success %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% else %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% endif %}">
+    <i class="fas {% if success %}fa-check-circle{% else %}fa-exclamation-circle{% endif %} mr-1"></i>
+    {{ message }}
+</div>

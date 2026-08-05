@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - Хосты{% endblock %}
+{% block page_title %}Хосты{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<!-- Статистика -->
+<div class="mb-6">
+    <div id="hosts-stats">
+        {% include "partials/_host_stats.html" %}
+    </div>
+</div>
+
+<!-- Фильтры -->
+<div class="mb-4 flex gap-2">
+    <button hx-get="/hosts/htmx/list"
+            hx-target="#hosts-list"
+            hx-swap="innerHTML"
+            hx-indicator="#hosts-update-indicator"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50">
+        <i class="fas fa-sync-alt"></i>
+        Обновить
+        <span id="hosts-update-indicator" class="htmx-indicator">
+            <i class="fas fa-spinner fa-spin"></i>
+        </span>
+    </button>
+    <select onchange="htmx.ajax('GET', '/hosts/htmx/list?status=' + this.value, {target: '#hosts-list'})"
+            class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
+        <option value="">Все</option>
+        <option value="ONLINE">Онлайн</option>
+        <option value="OFFLINE">Оффлайн</option>
+    </select>
+</div>
+
+<!-- Список хостов -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div id="hosts-list">
+        {% include "partials/_host_list.html" %}
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div id="host-modal" class="hidden fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-4"
+     onclick="if(event.target === this) this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-auto">
+        <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+            <h3 class="text-lg font-semibold">Информация о хосте</h3>
+            <button onclick="document.getElementById('host-modal').classList.add('hidden')"
+                    class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="modal-content" class="p-4">
+            <div class="text-center py-8">
+                <i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: inline-block;
+    }
+    .htmx-request.htmx-indicator {
+        display: inline-block;
+    }
+</style>
+{% endblock %}

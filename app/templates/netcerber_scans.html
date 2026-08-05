@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - Сканирования{% endblock %}
+{% block page_title %}Сканирования сети{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<div class="mb-4 flex flex-wrap gap-2 items-center justify-between">
+    <div class="flex gap-2 items-center">
+        <button hx-post="/netcerber/htmx/scan-now"
+                hx-target="#scan-message"
+                hx-swap="innerHTML"
+                hx-indicator="#scan-indicator"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+            <i class="fas fa-play"></i>
+            Запустить сканирование
+            <span id="scan-indicator" class="htmx-indicator"><i class="fas fa-spinner fa-spin"></i></span>
+        </button>
+        <button hx-get="/netcerber/htmx/scan-status"
+                hx-target="#scan-status"
+                hx-swap="innerHTML"
+                class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-1">
+            <i class="fas fa-sync-alt"></i>
+            Статус
+        </button>
+        {% if baseline %}
+        <form hx-post="/netcerber/htmx/clear-baseline"
+              hx-target="#scan-message"
+              hx-swap="innerHTML"
+              class="inline">
+            <button type="submit" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center gap-1"
+                    hx-confirm="Сбросить эталонный снимок?">
+                <i class="fas fa-star"></i>
+                Сбросить эталон
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    <a href="/netcerber/" class="px-3 py-1.5 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center gap-1">
+        <i class="fas fa-arrow-left"></i>
+        Устройства
+    </a>
+</div>
+
+<div id="scan-message" class="mb-4"></div>
+
+<div id="scan-status" class="mb-4"
+     hx-get="/netcerber/htmx/scan-status"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+</div>
+
+{% if baseline %}
+<div class="mb-4 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-700 flex items-center gap-2">
+    <i class="fas fa-star text-yellow-500"></i>
+    <span class="text-sm">Эталонный снимок #{{ baseline.id }} от {{ baseline.started_at|datetime }}</span>
+</div>
+{% endif %}
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <span class="font-semibold">Журнал сканирований</span>
+        <span class="text-sm text-gray-500">Всего: {{ total }}</span>
+    </div>
+    <div id="scan-list">
+        {% with scans=scans, total=total %}
+        {% include "partials/_netcerber_scans.html" %}
+        {% endwith %}
+    </div>
+</div>
+{% endblock %}

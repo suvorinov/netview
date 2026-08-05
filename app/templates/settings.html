@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - Настройки{% endblock %}
+{% block page_title %}Настройки{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<!-- Kyocera Printer Monitor API -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold flex items-center gap-2">
+            <i class="fas fa-print text-blue-500"></i>
+            Kyocera Printer Monitor API
+        </h3>
+        <button hx-get="/settings/htmx/status"
+                hx-target="#service-status"
+                hx-swap="innerHTML"
+                class="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+
+    <!-- Статус сервиса -->
+    <div id="service-status" class="mb-4">
+        {% include "partials/_service_status.html" %}
+    </div>
+
+    <!-- Настройки -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Порог уведомления -->
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+            <h4 class="font-medium mb-3 flex items-center gap-2">
+                <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+                Порог низкого тонера
+            </h4>
+            <form hx-put="/settings/htmx/threshold"
+                  hx-target="#threshold-result"
+                  hx-swap="innerHTML">
+                <div class="flex items-center gap-3">
+                    <input type="number"
+                           name="threshold"
+                           value="{{ threshold }}"
+                           min="0"
+                           max="100"
+                           class="w-24 px-3 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <span class="text-gray-500 dark:text-gray-400">%</span>
+                    <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Сохранить
+                    </button>
+                </div>
+            </form>
+            <div id="threshold-result" class="mt-2"></div>
+        </div>
+
+        <!-- Интервал проверки -->
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+            <h4 class="font-medium mb-3 flex items-center gap-2">
+                <i class="fas fa-clock text-green-500"></i>
+                Интервал проверки
+            </h4>
+            <form hx-put="/settings/htmx/interval"
+                  hx-target="#interval-result"
+                  hx-swap="innerHTML">
+                <div class="flex items-center gap-3">
+                    <select name="interval"
+                            class="px-3 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="60" {% if interval == 60 %}selected{% endif %}>1 мин</option>
+                        <option value="120" {% if interval == 120 %}selected{% endif %}>2 мин</option>
+                        <option value="300" {% if interval == 300 %}selected{% endif %}>5 мин</option>
+                        <option value="600" {% if interval == 600 %}selected{% endif %}>10 мин</option>
+                        <option value="900" {% if interval == 900 %}selected{% endif %}>15 мин</option>
+                        <option value="1800" {% if interval == 1800 %}selected{% endif %}>30 мин</option>
+                        <option value="3600" {% if interval == 3600 %}selected{% endif %}>1 час</option>
+                    </select>
+                    <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Сохранить
+                    </button>
+                </div>
+            </form>
+            <div id="interval-result" class="mt-2"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

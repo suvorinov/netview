@@ -1,0 +1,20 @@
+{% if file_info %}
+<div class="flex flex-wrap gap-4 text-xs">
+    <div>
+        <span class="text-gray-500">Период:</span>
+        <span class="font-medium ml-1">{{ file_info.period.first_record }} — {{ file_info.period.last_record }}</span>
+    </div>
+    <div>
+        <span class="text-gray-500">Длительность:</span>
+        <span class="font-medium ml-1">{{ "%.1f"|format(file_info.period.duration_days) }} дн.</span>
+    </div>
+    <div>
+        <span class="text-gray-500">Уникальных IP:</span>
+        <span class="font-medium ml-1">{{ file_info.statistics.unique_ips }}</span>
+    </div>
+    <div>
+        <span class="text-gray-500">Размер:</span>
+        <span class="font-medium ml-1" title="{{ file_info.size }} B">{{ file_info.size|human_size }}</span>
+    </div>
+</div>
+{% endif %}

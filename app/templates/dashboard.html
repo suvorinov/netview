@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<!-- Карточки статистики -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <!-- Принтеры -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                <i class="fas fa-print text-blue-600 dark:text-blue-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Принтеров</p>
+                <p class="text-2xl font-bold">{{ printer_count }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Низкий тонер -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
+                <i class="fas fa-exclamation-triangle text-yellow-600 dark:text-yellow-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Низкий тонер</p>
+                <p class="text-2xl font-bold">{{ low_toner }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Хосты -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                <i class="fas fa-server text-purple-600 dark:text-purple-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Хостов</p>
+                <p class="text-2xl font-bold">{{ host_count }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Хосты онлайн -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
+                <i class="fas fa-check-circle text-green-600 dark:text-green-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Хосты онлайн</p>
+                <p class="text-2xl font-bold">{{ hosts_online }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Карточки LogSpy -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <!-- Пользователи AD -->
+    <a href="/users/" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-lg transition group">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
+                <i class="fas fa-users text-indigo-600 dark:text-indigo-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Пользователей AD</p>
+                <p class="text-2xl font-bold group-hover:text-indigo-600 transition">{{ ad_users_count }}</p>
+            </div>
+        </div>
+    </a>
+
+    <!-- Уникальных IP -->
+    <a href="/logs/" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-lg transition group">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-cyan-100 dark:bg-cyan-900 rounded-lg">
+                <i class="fas fa-globe text-cyan-600 dark:text-cyan-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Активных IP</p>
+                <p class="text-2xl font-bold group-hover:text-cyan-600 transition">{{ unique_users }}</p>
+            </div>
+        </div>
+    </a>
+
+    <!-- Заблокировано -->
+    <a href="/logs/?status=blocked" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-lg transition group">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-red-100 dark:bg-red-900 rounded-lg">
+                <i class="fas fa-ban text-red-600 dark:text-red-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Заблокировано</p>
+                <p class="text-2xl font-bold group-hover:text-red-600 transition">{{ blocked_count }}</p>
+            </div>
+        </div>
+    </a>
+
+    <!-- Стоп-лист -->
+    <a href="/stoplist/" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 hover:shadow-lg transition group">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                <i class="fas fa-shield-alt text-orange-600 dark:text-orange-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="text-gray-500 dark:text-gray-400 text-sm">Стоп-слов</p>
+                <p class="text-2xl font-bold group-hover:text-orange-600 transition">{{ stoplist_count }}</p>
+            </div>
+        </div>
+    </a>
+</div>
+
+<!-- Статус AD -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-directory text-indigo-500 text-lg"></i>
+            <span class="font-semibold">Active Directory</span>
+            {% if ad_sync_status == 'ok' %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                <i class="fas fa-check-circle mr-1"></i> Синхронизировано
+            </span>
+            {% elif ad_sync_status == 'error' %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                <i class="fas fa-exclamation-circle mr-1"></i> Ошибка
+            </span>
+            {% else %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                не синхронизировано
+            </span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-gray-500">
+            {{ ad_computers_count }} компьютеров | {{ ad_users_count }} пользователей | {{ log_files_count }} лог-файлов
+        </div>
+    </div>
+</div>
+
+<!-- Быстрые действия -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Принтеры -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-print text-blue-500"></i>
+            Принтеры
+        </h3>
+        <div id="printers-quick">
+            {% include "partials/_printer_quick.html" %}
+        </div>
+    </div>
+
+    <!-- Хосты -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-server text-purple-500"></i>
+            Хосты
+        </h3>
+        <div id="hosts-quick">
+            {% include "partials/_host_stats.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - Принтеры{% endblock %}
+{% block page_title %}Принтеры{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<div class="mb-4 flex gap-2">
+    <!--
+    <button hx-get="/printers/htmx/list"
+            hx-target="#printers-list"
+            hx-swap="innerHTML"
+            hx-indicator="#update-indicator"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50">
+        <i class="fas fa-sync-alt"></i>
+        Обновить
+        <span id="update-indicator" class="htmx-indicator">
+            <i class="fas fa-spinner fa-spin"></i>
+        </span>
+    </button>
+    -->
+    <button hx-post="/printers/check"
+            hx-target="#check-result"
+            hx-swap="innerHTML"
+            hx-indicator="#check-indicator"
+            class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center gap-2 disabled:opacity-50">
+        <i class="fas fa-search"></i>
+        Проверить все
+        <span id="check-indicator" class="htmx-indicator">
+            <i class="fas fa-spinner fa-spin"></i>
+        </span>
+    </button>
+</div>
+
+<div id="check-result" class="mb-4"></div>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div id="printers-list">
+        {% include "partials/_printer_list.html" %}
+    </div>
+</div>
+
+<style>
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: inline-block;
+    }
+    .htmx-request.htmx-indicator {
+        display: inline-block;
+    }
+</style>
+{% endblock %}

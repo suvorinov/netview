@@ -1,0 +1,74 @@
+<div class="overflow-x-auto">
+    <table class="w-full">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium">ID</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Начало</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Окончание</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Статус</th>
+                <th class="px-4 py-3 text-center text-sm font-medium">Устройств</th>
+                <th class="px-4 py-3 text-center text-sm font-medium">Новых</th>
+                <th class="px-4 py-3 text-center text-sm font-medium">Неавториз.</th>
+                <th class="px-4 py-3 text-center text-sm font-medium">Эталон</th>
+                <th class="px-4 py-3 text-right text-sm font-medium"></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for scan in scans %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-4 py-3 text-sm font-mono">{{ scan.id }}</td>
+                <td class="px-4 py-3 text-sm">{{ scan.started_at|datetime }}</td>
+                <td class="px-4 py-3 text-sm">{{ scan.finished_at|datetime }}</td>
+                <td class="px-4 py-3">
+                    {% if scan.status == 'completed' %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">completed</span>
+                    {% elif scan.status == 'running' %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900">running</span>
+                    {% elif scan.status == 'error' %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900">error</span>
+                    {% else %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-600">{{ scan.status }}</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-center">{{ scan.total_devices }}</td>
+                <td class="px-4 py-3 text-center">{{ scan.new_devices }}</td>
+                <td class="px-4 py-3 text-center">{{ scan.unauthorized_devices }}</td>
+                <td class="px-4 py-3 text-center">
+                    {% if scan.is_baseline %}
+                    <i class="fas fa-star text-yellow-500" title="Эталонный снимок"></i>
+                    {% else %}
+                    <form hx-post="/netcerber/htmx/set-baseline/{{ scan.id }}"
+                          hx-target="#scan-message"
+                          hx-swap="innerHTML"
+                          class="inline">
+                        <button type="submit" class="text-gray-400 hover:text-yellow-500 text-xs"
+                                hx-confirm="Сделать этот снимок эталонным?">
+                            <i class="far fa-star"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-right">
+                    <form hx-post="/netcerber/htmx/delete-scan/{{ scan.id }}"
+                          hx-target="#scan-message"
+                          hx-swap="innerHTML"
+                          class="inline">
+                        <button type="submit" class="text-red-400 hover:text-red-600 text-sm"
+                                hx-confirm="Удалить запись сканирования?">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not scans %}
+            <tr>
+                <td colspan="9" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <i class="fas fa-history text-2xl mb-2 block"></i>
+                    Сканирований не найдено
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

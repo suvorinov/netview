@@ -1,0 +1,88 @@
+<!-- Список принтеров для HTMX -->
+<div class="overflow-x-auto">
+    <table class="w-full">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium">Имя</th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/printers/htmx/list?sort=ip&order={% if sort_by == 'ip' and order == 'asc' %}desc{% else %}asc{% endif %}"
+                    hx-target="#printers-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        IP
+                        {% if sort_by == 'ip' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Модель</th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/printers/htmx/list?sort=toner&order={% if sort_by == 'toner' and order == 'asc' %}desc{% else %}asc{% endif %}"
+                    hx-target="#printers-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Тонер
+                        {% if sort_by == 'toner' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/printers/htmx/list?sort=print_count&order={% if sort_by == 'print_count' and order == 'asc' %}desc{% else %}asc{% endif %}"
+                    hx-target="#printers-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Страниц
+                        {% if sort_by == 'print_count' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Статус</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for printer in printers %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-print text-gray-400"></i>
+                        {{ printer.name }}
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ printer.ip }}</td>
+                <td class="px-4 py-3">{{ printer.model }}</td>
+                <td class="px-4 py-3">
+                    {% set toner = printer.toner_percentage_value|default(100) %}
+                    <div class="flex items-center gap-2">
+                        <div class="w-20 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if toner < 20 %}bg-red-500{% elif toner < 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                                 style="width: {{ toner }}%"></div>
+                        </div>
+                        <span class="text-sm">{{ printer.toner_percentage }}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ printer.print_count }}</td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 text-xs rounded-full {% if printer.status == 'OK' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                        {{ printer.status }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not printers %}
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    Нет данных о принтерах
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

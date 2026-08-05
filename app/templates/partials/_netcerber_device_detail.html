@@ -1,0 +1,66 @@
+<div class="p-6">
+    <div class="flex justify-between items-start mb-4">
+        <div>
+            <h3 class="text-lg font-semibold">{{ device.hostname or 'Неизвестно' }}</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ device.ip_address }}</p>
+        </div>
+        <button onclick="document.getElementById('device-modal').classList.add('hidden')"
+                class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <i class="fas fa-times text-xl"></i>
+        </button>
+    </div>
+
+    <div class="space-y-3 text-sm">
+        <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+            <span class="text-gray-500">MAC</span>
+            <span class="font-mono">{{ device.mac_address }}</span>
+        </div>
+        <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+            <span class="text-gray-500">Vendor</span>
+            <span>{{ device.vendor }}</span>
+        </div>
+        <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+            <span class="text-gray-500">Описание</span>
+            <span>{{ device.description or '—' }}</span>
+        </div>
+        <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+            <span class="text-gray-500">Статус</span>
+            {% if device.is_authorized %}
+            <span class="text-green-600 dark:text-green-400 font-medium">Авторизовано</span>
+            {% else %}
+            <span class="text-red-600 dark:text-red-400 font-medium">Неавторизовано</span>
+            {% endif %}
+        </div>
+        <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+            <span class="text-gray-500">Первый раз замечен</span>
+            <span>{{ device.first_seen|datetime }}</span>
+        </div>
+        <div class="flex justify-between pb-2">
+            <span class="text-gray-500">Последний раз замечен</span>
+            <span>{{ device.last_seen|datetime }}</span>
+        </div>
+    </div>
+
+    <div class="mt-6 flex gap-2">
+        {% if device.is_authorized %}
+        <button hx-post="/netcerber/htmx/unauthorize/{{ device.id }}"
+                hx-target="#device-modal-content"
+                hx-swap="innerHTML"
+                hx-confirm="Снять авторизацию устройства?"
+                class="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm">
+            <i class="fas fa-ban mr-1"></i> Деавторизовать
+        </button>
+        {% else %}
+        <button hx-post="/netcerber/htmx/authorize/{{ device.id }}"
+                hx-target="#device-modal-content"
+                hx-swap="innerHTML"
+                class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+            <i class="fas fa-check mr-1"></i> Авторизовать
+        </button>
+        {% endif %}
+        <button onclick="document.getElementById('device-modal').classList.add('hidden')"
+                class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-sm">
+            Закрыть
+        </button>
+    </div>
+</div>

@@ -1,0 +1,102 @@
+<div class="overflow-x-auto">
+    <table class="w-full">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/netcerber/htmx/list?sort=ip&order={% if sort_by == 'ip' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+                    hx-target="#device-list" hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        IP
+                        {% if sort_by == 'ip' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/netcerber/htmx/list?sort=hostname&order={% if sort_by == 'hostname' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+                    hx-target="#device-list" hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Hostname
+                        {% if sort_by == 'hostname' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium">MAC</th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/netcerber/htmx/list?sort=vendor&order={% if sort_by == 'vendor' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+                    hx-target="#device-list" hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Vendor
+                        {% if sort_by == 'vendor' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Статус</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Действия</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for device in devices %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-network-wired text-gray-400"></i>
+                        {{ device.ip_address }}
+                    </div>
+                </td>
+                <td class="px-4 py-3 font-medium">{{ device.hostname }}</td>
+                <td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm font-mono">{{ device.mac_address }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ device.vendor }}</td>
+                <td class="px-4 py-3">
+                    {% if device.is_authorized %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        <i class="fas fa-check-circle mr-1"></i> Авторизовано
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                        <i class="fas fa-exclamation-circle mr-1"></i> Неавторизовано
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-right">
+                    <button hx-get="/netcerber/htmx/device/{{ device.id }}"
+                            hx-target="#device-modal-content"
+                            hx-swap="innerHTML"
+                            onclick="document.getElementById('device-modal').classList.remove('hidden')"
+                            class="text-blue-600 hover:text-blue-800 dark:text-blue-400 text-sm">
+                        <i class="fas fa-info-circle"></i>
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not devices %}
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <i class="fas fa-search text-2xl mb-2 block"></i>
+                    Устройства не найдены
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Device Detail Modal -->
+<div id="device-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <div id="device-modal-content">
+            <div class="p-6 text-center text-gray-500">
+                <i class="fas fa-spinner fa-spin text-2xl"></i>
+            </div>
+        </div>
+    </div>
+</div>

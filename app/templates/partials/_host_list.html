@@ -1,0 +1,176 @@
+<!-- Список хостов для HTMX -->
+<div class="overflow-x-auto">
+    <table class="w-full">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=hostname&order={% if sort_by == 'hostname' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Хост
+                        {% if sort_by == 'hostname' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=ip&order={% if sort_by == 'ip' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        IP
+                        {% if sort_by == 'ip' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=os&order={% if sort_by == 'os' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        ОС
+                        {% if sort_by == 'os' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=cpu&order={% if sort_by == 'cpu' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        CPU
+                        {% if sort_by == 'cpu' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=ram&order={% if sort_by == 'ram' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        RAM
+                        {% if sort_by == 'ram' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=disk&order={% if sort_by == 'disk' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Диск
+                        {% if sort_by == 'disk' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+                <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
+                    hx-get="/hosts/htmx/list?sort=status&order={% if sort_by == 'status' and order == 'asc' %}desc{% else %}asc{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                    hx-target="#hosts-list"
+                    hx-swap="innerHTML">
+                    <div class="flex items-center gap-1">
+                        Статус
+                        {% if sort_by == 'status' %}
+                        <i class="fas fa-sort-{% if order == 'asc' %}up{% else %}down{% endif %} text-blue-500"></i>
+                        {% else %}
+                        <i class="fas fa-sort text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for host in hosts %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                hx-get="/hosts/htmx/host/{{ host.hostname }}"
+                hx-target="#modal-content"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('host-modal').classList.remove('hidden')">
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-server text-gray-400"></i>
+                        <div>
+                            {{ host.hostname }}
+                            {% if host.status == 'OFFLINE' and host.last_seen %}
+                            <p class="text-xs text-red-400">вне сети {{ host.last_seen|time_ago }} назад</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ host.ip_address or '—' }}</td>
+                <td class="px-4 py-3">{{ host.os_name }}</td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-16 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if host.cpu_percent > 80 %}bg-red-500{% elif host.cpu_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                                 style="width: {{ host.cpu_percent }}%"></div>
+                        </div>
+                        <span class="text-sm">{{ "%.1f"|format(host.cpu_percent) }}%</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-16 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if host.ram_percent > 80 %}bg-red-500{% elif host.ram_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                                 style="width: {{ host.ram_percent }}%"></div>
+                        </div>
+                        <span class="text-sm">{{ "%.1f"|format(host.ram_percent) }}%</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-16 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if host.disk_percent > 80 %}bg-red-500{% elif host.disk_percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                                 style="width: {{ host.disk_percent }}%"></div>
+                        </div>
+                        <span class="text-sm">{{ "%.1f"|format(host.disk_percent) }}%</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 text-xs rounded-full {% if host.status == 'ONLINE' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                        {{ host.status }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not hosts %}
+            <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    Нет данных о хостах
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Пагинация -->
+{% if total_pages|default(1) > 1 %}
+<div class="flex justify-center gap-2 mt-4 p-4">
+    {% for p in range(1, total_pages + 1) %}
+    <button hx-get="/hosts/htmx/list?page={{ p }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}&order={{ order }}{% endif %}"
+            hx-target="#hosts-list"
+            hx-swap="innerHTML"
+            class="px-3 py-1 rounded {% if p == current_page %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}">
+        {{ p }}
+    </button>
+    {% endfor %}
+</div>
+{% endif %}

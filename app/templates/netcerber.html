@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - NetCerber{% endblock %}
+{% block page_title %}Устройства сети{% endblock %}
+
+{% block content %}
+{% include "partials/_service_alert.html" %}
+<div class="mb-4 flex flex-wrap gap-2 items-center">
+    <div class="flex gap-1 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+        <button class="px-3 py-1.5 text-sm rounded-md {% if not authorized and not unauthorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+                hx-get="/netcerber/htmx/list"
+                hx-target="#device-list"
+                hx-swap="innerHTML">
+            Все
+        </button>
+        <button class="px-3 py-1.5 text-sm rounded-md {% if authorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+                hx-get="/netcerber/htmx/list?authorized=1"
+                hx-target="#device-list"
+                hx-swap="innerHTML">
+            Авторизованные
+        </button>
+        <button class="px-3 py-1.5 text-sm rounded-md {% if unauthorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+                hx-get="/netcerber/htmx/list?unauthorized=1"
+                hx-target="#device-list"
+                hx-swap="innerHTML">
+            Неавторизованные
+        </button>
+    </div>
+
+    <button hx-post="/netcerber/htmx/authorize-all"
+            hx-target="#message-area"
+            hx-swap="innerHTML"
+            hx-confirm="Авторизовать все устройства?"
+            class="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1">
+        <i class="fas fa-check-double"></i>
+        Авторизовать все
+    </button>
+
+    <a href="/netcerber/scans/"
+       class="px-3 py-1.5 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center gap-1">
+        <i class="fas fa-history"></i>
+        Сканирования
+    </a>
+</div>
+
+<div id="message-area" class="mb-4"></div>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow" id="stats-area"
+     hx-get="/netcerber/htmx/stats"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow mt-6">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <span class="font-semibold">Устройства</span>
+        <span id="device-count" class="text-sm text-gray-500">{{ total }} устройств</span>
+    </div>
+    <div id="device-list">
+        {% include "partials/_netcerber_device_list.html" %}
+    </div>
+</div>
+{% endblock %}
