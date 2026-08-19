@@ -39,9 +39,16 @@
     </style>
 
     <script>
-        // Подставлять CSRF-токен во все HTMX-запросы (POST/PUT/DELETE)
-        document.body.addEventListener('htmx:configRequest', (e) => {
+        // Подставлять CSRF-токен во все HTMX-запросы (POST/PUT/DELETE).
+        // Слушаем на document: скрипт в <head> выполняется до появления <body>.
+        document.addEventListener('htmx:configRequest', (e) => {
             e.detail.headers['X-CSRFToken'] = document.querySelector('meta[name="csrf-token"]').content;
+        });
+        // Показывать фрагменты ошибок (4xx/5xx) вместо молчаливого отбрасывания
+        document.addEventListener('htmx:beforeSwap', (e) => {
+            if (e.detail.isError) {
+                e.detail.shouldSwap = true;
+            }
         });
     </script>
 </head>
