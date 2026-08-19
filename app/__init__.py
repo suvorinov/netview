@@ -7,17 +7,21 @@
 import logging
 from datetime import datetime
 
-from flask import Flask, request
+from flask import Flask, redirect, request, url_for
+from flask_login import current_user
+from flask_wtf import CSRFProtect
 
+from app.auth import auth_bp, login_manager
 from app.config import Config
 from app.routes.dashboard import dashboard_bp
-from app.routes.printers import printers_bp
 from app.routes.hosts import hosts_bp
-from app.routes.settings import settings_bp
-from app.routes.users import users_bp
 from app.routes.logs import logs_bp
-from app.routes.stoplist import stoplist_bp
 from app.routes.netcerber import netcerber_bp
+from app.routes.printers import printers_bp
+from app.routes.settings import settings_bp
+from app.routes.stoplist import stoplist_bp
+from app.routes.users import users_bp
+from app.utils import human_size
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +39,14 @@ def create_app(config_class=Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    if config_class.SECRET_KEY_IS_RANDOM:
+        logger.warning(
+            "SECRET_KEY не задан в окружении — сгенерирован случайный, "
+            "сессии будут сбрасываться при перезапуске"
+        )
+    if not config_class.AUTH_USERS:
+        logger.warning("AUTH_USERS не задан — вход в систему будет невозможен")
+
     @app.template_filter("datetime")
     def _format_datetime(value):
         if not value:
@@ -48,23 +60,7 @@ def create_app(config_class=Config) -> Flask:
 
     @app.template_filter("human_size")
     def _format_human_size(b):
-        if b is None:
-            return "—"
-        try:
-            b = int(b)
-        except (TypeError, ValueError):
-            return str(b)
-        if b < 0:
-            return str(b)
-        if b < 1024:
-            return f"{b} B"
-        for unit in ("KB", "MB", "GB", "TB", "PB"):
-            b /= 1024
-            if b < 1024:
-                if b >= 100:
-                    return f"{b:.0f} {unit}"
-                return f"{b:.1f} {unit}"
-        return f"{b:.1f} EB"
+        return human_size(b)
 
     @app.template_filter("time_ago")
     def _format_time_ago(value):
@@ -88,6 +84,7 @@ def create_app(config_class=Config) -> Flask:
             return f"{hours} ч. {minutes} мин."
         return f"{minutes} мин."
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(printers_bp, url_prefix="/printers")
     app.register_blueprint(hosts_bp, url_prefix="/hosts")
@@ -97,10 +94,22 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(stoplist_bp, url_prefix="/stoplist")
     app.register_blueprint(netcerber_bp, url_prefix="/netcerber")
 
+    login_manager.init_app(app)
+    CSRFProtect(app)
+
     @app.before_request
-    def log_unknown_requests():
-        """Логировать неизвестные запросы с User-Agent."""
-        pass
+    def require_login():
+        """Требовать аутентификацию на всех страницах, кроме входа и статики.
+
+        HTMX-фрагменты и API тоже закрыты: неавторизованный запрос получит
+        редирект на страницу входа.
+        """
+        if current_user.is_authenticated:
+            return None
+        # Разрешённые без входа: страница логина и статические файлы.
+        if request.endpoint in ("auth.login", "static") or request.endpoint is None:
+            return None
+        return redirect(url_for("auth.login", next=request.full_path))
 
     @app.after_request
     def log_response(response):

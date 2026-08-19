@@ -41,6 +41,7 @@
                           hx-target="#scan-message"
                           hx-swap="innerHTML"
                           class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="text-gray-400 hover:text-yellow-500 text-xs"
                                 hx-confirm="Сделать этот снимок эталонным?">
                             <i class="far fa-star"></i>
@@ -53,6 +54,7 @@
                           hx-target="#scan-message"
                           hx-swap="innerHTML"
                           class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="text-red-400 hover:text-red-600 text-sm"
                                 hx-confirm="Удалить запись сканирования?">
                             <i class="fas fa-trash-alt"></i>

@@ -4,16 +4,25 @@
 """
 
 import logging
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
-from flask import Blueprint, render_template, current_app
+from flask import Blueprint, current_app, render_template
 
-from app.api.printer_client import PrinterMonitorClient
 from app.api.host_client import HostMonitorClient
 from app.api.logspy_client import LogSpyClient
+from app.api.printer_client import PrinterMonitorClient
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 logger = logging.getLogger(__name__)
+
+# Порог загрузки RAM/Диска, после которого хост считается критическим
+CRITICAL_PERCENT = 80
+
+# Значения по умолчанию при недоступности сервисов
+EMPTY_HOST_STATS = {"total": 0, "online": 0, "offline": 0, "avg_cpu": 0}
 
 
 def _get_printer_client() -> PrinterMonitorClient:
@@ -28,103 +37,154 @@ def _get_logspy_client() -> LogSpyClient:
     return LogSpyClient(current_app.config["LOGSPY_API_URL"])
 
 
+def _run_task(
+    name: str,
+    fn: Callable[[], Any],
+    default: Any,
+    service: str,
+) -> tuple[Any, str | None]:
+    """Выполнить запрос к сервису.
+
+    Args:
+        name: Имя задачи (для лога).
+        fn: Функция запроса.
+        default: Значение при ошибке.
+        service: Имя сервиса (для баннера недоступности).
+
+    Returns:
+        (результат, None) при успехе или (default, service) при ошибке.
+    """
+    try:
+        return fn(), None
+    except Exception as e:
+        logger.error("%s API (%s) error: %s", service, name, e)
+        return default, service
+
+
+def _has_toner(p: dict[str, Any]) -> bool:
+    """Есть ли у принтера числовое значение тонера (не "N/A").
+
+    У принтеров без данных о расходнике API отдаёт 0.0 с
+    toner_percentage == "N/A" — такие принтеры не считаются критическими.
+    """
+    if p.get("toner_percentage") == "N/A":
+        return False
+    return isinstance(p.get("toner_percentage_value"), int | float)
+
+
+def _critical_printers(
+    printers: list[dict[str, Any]], toner_threshold: int, limit: int = 5
+) -> list[dict[str, Any]]:
+    """Принтеры с тонером ниже порога, топ-limit по возрастанию тонера.
+
+    Принтеры с "N/A" (нет данных о тонере) исключаются из списка.
+    """
+    critical = [
+        p for p in printers
+        if _has_toner(p)
+        and p.get("toner_percentage_value", 0) < toner_threshold
+    ]
+    return sorted(critical, key=lambda p: p["toner_percentage_value"])[:limit]
+
+
+def _critical_hosts(
+    hosts: list[dict[str, Any]], limit: int = 5
+) -> list[dict[str, Any]]:
+    """Хосты с критической загрузкой RAM/Диска, топ-limit по нагрузке."""
+    return sorted(
+        (h for h in hosts
+         if h.get("ram_percent", 0) > CRITICAL_PERCENT
+         or h.get("disk_percent", 0) > CRITICAL_PERCENT),
+        key=lambda h: max(h.get("ram_percent", 0), h.get("disk_percent", 0)),
+        reverse=True,
+    )[:limit]
+
+
 @dashboard_bp.route("/")
 def index() -> str:
     printer_client = _get_printer_client()
     host_client = _get_host_client()
     logspy_client = _get_logspy_client()
 
-    unavailable_services = []
+    # Независимые запросы выполняем параллельно, чтобы страница не ждала
+    # каждый сервис по очереди (при недоступном сервисе — до 20 секунд).
+    tasks: dict[str, tuple[Callable[[], Any], Any, str]] = {
+        "printers": (printer_client.get_printers, [], "Printer Monitor"),
+        "threshold": (printer_client.get_threshold, {}, "Printer Monitor"),
+        "host_stats": (host_client.get_stats, EMPTY_HOST_STATS, "Host Monitor"),
+        "hosts": (
+            lambda: host_client.get_hosts(page=1, limit=500),
+            {}, "Host Monitor",
+        ),
+        "ad_stats": (logspy_client.get_ad_stats, {}, "LogSpy"),
+        "logs": (logspy_client.get_logs, [], "LogSpy"),
+        "stoplist": (logspy_client.get_stoplist, {}, "LogSpy"),
+    }
 
-    # Принтеры
-    printers = []
-    printer_count = 0
-    low_toner = 0
-    try:
-        printers = printer_client.get_printers()
-        printer_count = len(printers)
-        low_toner = sum(
-            1 for p in printers
-            if p.get("toner_percentage_value", 100) < 20
-        )
-    except Exception as e:
-        printer_count = 0
-        low_toner = 0
-        logger.error("Printer Monitor API error: %s", e)
-        unavailable_services.append("Printer Monitor")
+    results: dict[str, Any] = {}
+    unavailable: set[str] = set()
+    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+        futures = {
+            pool.submit(_run_task, name, fn, default, service): name
+            for name, (fn, default, service) in tasks.items()
+        }
+        for future in as_completed(futures):
+            name = futures[future]
+            results[name], failed_service = future.result()
+            if failed_service:
+                unavailable.add(failed_service)
 
-    # Хосты
-    host_stats = {"total": 0, "online": 0, "offline": 0, "avg_cpu": 0}
-    host_count = 0
-    hosts_online = 0
-    hosts_offline = 0
-    try:
-        host_stats = host_client.get_stats()
-        host_count = host_stats.get("total", 0)
-        hosts_online = host_stats.get("online", 0)
-        hosts_offline = host_stats.get("offline", 0)
-    except Exception as e:
-        host_count = 0
-        hosts_online = 0
-        hosts_offline = 0
-        logger.error("Host Monitor API error: %s", e)
-        unavailable_services.append("Host Monitor")
+    printers = results["printers"]
+    printer_count = len(printers)
+    toner_threshold = results["threshold"].get("threshold", 20)
+    low_toner = sum(
+        1 for p in printers
+        if _has_toner(p)
+        and p.get("toner_percentage_value", 0) < toner_threshold
+    )
+    critical_printers = _critical_printers(printers, toner_threshold)
 
-    # LogSpy — AD
-    logspy_ok = True
-    ad_stats = {}
-    ad_users_count = 0
-    ad_computers_count = 0
-    ad_sync_status = "not_started"
-    try:
-        ad_stats = logspy_client.get_ad_stats()
-        ad_users_count = ad_stats.get("enabled_users", 0)
-        ad_computers_count = ad_stats.get("total_computers", 0)
-        ad_sync_status = ad_stats.get("sync_status", "not_started")
-    except Exception as e:
-        logspy_ok = False
-        logger.error("LogSpy API (AD stats) error: %s", e)
+    host_stats = results["host_stats"]
+    host_count = host_stats.get("total", 0)
+    hosts_online = host_stats.get("online", 0)
+    hosts_offline = host_stats.get("offline", 0)
+    critical_hosts = _critical_hosts(results["hosts"].get("items", []))
 
-    # LogSpy — Логи
-    log_files = []
+    ad_stats = results["ad_stats"]
+    ad_users_count = ad_stats.get("enabled_users", 0)
+    ad_computers_count = ad_stats.get("total_computers", 0)
+    ad_sync_status = ad_stats.get("sync_status", "not_started")
+
+    # Summary зависит от списка логов — выполняется после параллельного блока.
+    log_files = results["logs"]
     blocked_count = 0
     total_requests = 0
     unique_users = 0
-    stoplist_count = 0
-    try:
-        log_files = logspy_client.get_logs()
-        if log_files:
-            current_log = log_files[0]["name"]
-            summary = logspy_client.get_summary(current_log)
+    if log_files:
+        try:
+            summary = logspy_client.get_summary(log_files[0]["name"])
             ip_summary = summary.get("summary", {})
             for item in ip_summary.values():
                 blocked_count += item.get("blocked_visits", 0)
                 total_requests += item.get("total_visits", 0)
             unique_users = len(ip_summary)
-    except Exception as e:
-        logspy_ok = False
-        logger.error("LogSpy API (logs/summary) error: %s", e)
+        except Exception as e:
+            logger.error("LogSpy API (logs/summary) error: %s", e)
+            unavailable.add("LogSpy")
 
-    # LogSpy — Стоп-лист
-    try:
-        stoplist = logspy_client.get_stoplist()
-        stoplist_count = stoplist.get("total", 0)
-    except Exception as e:
-        logspy_ok = False
-        logger.error("LogSpy API (stoplist) error: %s", e)
-
-    if not logspy_ok:
-        unavailable_services.append("LogSpy")
+    stoplist_count = results["stoplist"].get("total", 0)
 
     return render_template(
         "dashboard.html",
         printer_count=printer_count,
         low_toner=low_toner,
         printers=printers,
+        critical_printers=critical_printers,
         host_count=host_count,
         hosts_online=hosts_online,
         hosts_offline=hosts_offline,
         stats=host_stats,
+        critical_hosts=critical_hosts,
         ad_users_count=ad_users_count,
         ad_computers_count=ad_computers_count,
         ad_sync_status=ad_sync_status,
@@ -133,5 +193,5 @@ def index() -> str:
         total_requests=total_requests,
         unique_users=unique_users,
         stoplist_count=stoplist_count,
-        unavailable_services=unavailable_services,
+        unavailable_services=sorted(unavailable),
     )

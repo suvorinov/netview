@@ -7,9 +7,10 @@
 import logging
 import re
 
-from flask import Blueprint, render_template, request, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app.api.logspy_client import LogSpyClient
+from app.utils import human_size
 
 users_bp = Blueprint("users", __name__)
 
@@ -18,13 +19,6 @@ logger = logging.getLogger(__name__)
 
 def _get_logspy_client() -> LogSpyClient:
     return LogSpyClient(current_app.config["LOGSPY_API_URL"])
-
-
-def _get_current_log(client: LogSpyClient) -> str:
-    logs = client.get_logs()
-    if logs:
-        return logs[0]["name"]
-    return ""
 
 
 def _get_user_upn(user: dict) -> str:
@@ -101,7 +95,7 @@ def detail(username: str):
         return render_template("errors/404.html", message="Пользователь не найден"), 404
 
     try:
-        current_log = _get_current_log(client)
+        current_log = client.get_current_log()
     except Exception as e:
         current_log = ""
         logger.error("LogSpy API (logs list) error: %s", e)
@@ -123,20 +117,12 @@ def detail(username: str):
                 r for r in raw_records
                 if r.get("user") and r["user"] != "-"
             ]
-            stats = all_data.get("stats", {})
 
             blocked_records = [
                 r for r in all_records if r.get("is_blocked")
             ]
             domains = list({r["domain"] for r in all_records if r.get("domain")})
             total_traffic = sum(r.get("size", 0) for r in all_records)
-
-            def _fmt_size(b: int) -> str:
-                for unit in ("B", "KB", "MB", "GB"):
-                    if b < 1024:
-                        return f"{b:.1f} {unit}"
-                    b /= 1024
-                return f"{b:.1f} TB"
 
             last_activity = ""
             if all_records:
@@ -163,7 +149,7 @@ def detail(username: str):
                 "username": username,
                 "total_requests": total_requests,
                 "total_traffic": total_traffic,
-                "total_traffic_formatted": _fmt_size(total_traffic),
+                "total_traffic_formatted": human_size(total_traffic),
                 "blocked_requests": blocked_total,
                 "domains_visited": sorted(domains),
                 "last_activity": last_activity,
@@ -199,7 +185,7 @@ def api_user_activity(username: str):
     log_file = request.args.get("log", "")
     if not log_file:
         try:
-            log_file = _get_current_log(client)
+            log_file = client.get_current_log()
         except Exception as e:
             logger.error("LogSpy API (logs list) error: %s", e)
             return jsonify({"error": "No log file"}), 400
@@ -208,8 +194,8 @@ def api_user_activity(username: str):
         data = client.get_data(
             log_file,
             user=user_upn,
-            page=int(request.args.get("page", 1)),
-            limit=int(request.args.get("limit", 100)),
+            page=request.args.get("page", 1, type=int),
+            limit=request.args.get("limit", 100, type=int),
             search=request.args.get("search"),
             status=request.args.get("status"),
             sort=request.args.get("sort", "time_desc"),

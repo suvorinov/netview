@@ -5,11 +5,11 @@
 """
 
 import logging
-from typing import Any
 
-from flask import Blueprint, render_template, current_app, request
+from flask import Blueprint, current_app, render_template, request
 
 from app.api.netcerber_client import NetCerberClient
+from app.utils import sort_items
 
 netcerber_bp = Blueprint("netcerber", __name__)
 
@@ -24,21 +24,19 @@ SORT_FIELDS: dict[str, str] = {
 }
 
 
+def _as_bool(value: str | None) -> bool | None:
+    """Преобразовать строку из query-параметра в bool.
+
+    Flask-конвертер type=bool работает через bool("false") == True,
+    поэтому разбираем вручную.
+    """
+    if value is None:
+        return None
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _get_client() -> NetCerberClient:
     return NetCerberClient(current_app.config["NETCERBER_API_URL"])
-
-
-def _sort_devices(devices: list[dict[str, Any]], sort_by: str, order: str) -> list[dict[str, Any]]:
-    if sort_by not in SORT_FIELDS:
-        return devices
-    field = SORT_FIELDS[sort_by]
-    reverse = order == "desc"
-    def get_sort_key(d: dict) -> Any:
-        val = d.get(field, "")
-        if isinstance(val, (int, float)):
-            return val
-        return val or ""
-    return sorted(devices, key=get_sort_key, reverse=reverse)
 
 
 @netcerber_bp.route("/")
@@ -65,8 +63,8 @@ def index():
 @netcerber_bp.route("/htmx/list")
 def htmx_list():
     client = _get_client()
-    authorized = request.args.get("authorized", type=bool)
-    unauthorized = request.args.get("unauthorized", type=bool)
+    authorized = _as_bool(request.args.get("authorized"))
+    unauthorized = _as_bool(request.args.get("unauthorized"))
     sort_by = request.args.get("sort", "")
     order = request.args.get("order", "asc")
     skip = request.args.get("skip", 0, type=int)
@@ -87,7 +85,7 @@ def htmx_list():
         total = 0
         logger.error("NetCerber API (devices) error: %s", e)
 
-    devices = _sort_devices(devices, sort_by, order)
+    devices = sort_items(devices, sort_by, order, SORT_FIELDS)
 
     return render_template(
         "partials/_netcerber_device_list.html",
@@ -124,7 +122,9 @@ def htmx_authorize(device_id: int):
         )
     except Exception as e:
         logger.error("NetCerber API (authorize=%s) error: %s", device_id, e)
-        return f'<span class="text-red-500">Ошибка: {e}</span>'
+        return render_template(
+            "partials/_error_message.html", message=str(e)
+        )
 
 
 @netcerber_bp.route("/htmx/unauthorize/<int:device_id>", methods=["POST"])
@@ -137,7 +137,9 @@ def htmx_unauthorize(device_id: int):
         )
     except Exception as e:
         logger.error("NetCerber API (unauthorize=%s) error: %s", device_id, e)
-        return f'<span class="text-red-500">Ошибка: {e}</span>'
+        return render_template(
+            "partials/_error_message.html", message=str(e)
+        )
 
 
 @netcerber_bp.route("/htmx/authorize-all", methods=["POST"])

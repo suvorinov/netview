@@ -5,7 +5,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Точечная копия: в образ не попадают README, анализ, git и т.п.
+COPY app/ ./app/
+COPY run.py .
 
 EXPOSE 5000
 

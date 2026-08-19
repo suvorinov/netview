@@ -60,9 +60,10 @@
                 <td class="px-4 py-3">{{ printer.model }}</td>
                 <td class="px-4 py-3">
                     {% set toner = printer.toner_percentage_value|default(100) %}
+                    {% set toner_threshold = toner_threshold|default(20) %}
                     <div class="flex items-center gap-2">
                         <div class="w-20 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                            <div class="h-2 rounded-full {% if toner < 20 %}bg-red-500{% elif toner < 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+                            <div class="h-2 rounded-full {% if toner < toner_threshold %}bg-red-500{% elif toner < 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
                                  style="width: {{ toner }}%"></div>
                         </div>
                         <span class="text-sm">{{ printer.toner_percentage }}</span>
@@ -70,9 +71,13 @@
                 </td>
                 <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ printer.print_count }}</td>
                 <td class="px-4 py-3">
-                    <span class="px-2 py-1 text-xs rounded-full {% if printer.status == 'OK' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
-                        {{ printer.status }}
-                    </span>
+                    {% if printer.status == 'ok' %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">OK</span>
+                    {% elif printer.status == 'low_toner' %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Низкий тонер</span>
+                    {% else %}
+                    <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{{ printer.status }}</span>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

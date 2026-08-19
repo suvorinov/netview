@@ -6,7 +6,7 @@
 
 import logging
 
-from flask import Blueprint, render_template, request, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app.api.logspy_client import LogSpyClient
 
@@ -29,8 +29,8 @@ def index():
         user_filter = f"{user_filter}@{current_app.config['AD_DOMAIN']}"
     status_filter = request.args.get("status", "").strip()
     sort = request.args.get("sort", "time_desc")
-    page = int(request.args.get("page", 1))
-    limit = int(request.args.get("limit", 100))
+    page = request.args.get("page", 1, type=int)
+    limit = request.args.get("limit", 100, type=int)
 
     unavailable_services = []
     try:
@@ -43,7 +43,6 @@ def index():
     if not log_file and log_files:
         log_file = log_files[0]["name"]
 
-    file_info = None
     records = []
     stats = {}
     pagination = {"page": 1, "limit": limit, "total_records": 0, "total_pages": 0}
@@ -107,8 +106,8 @@ def api_data():
     try:
         data = client.get_data(
             log_file,
-            page=int(request.args.get("page", 1)),
-            limit=int(request.args.get("limit", 100)),
+            page=request.args.get("page", 1, type=int),
+            limit=request.args.get("limit", 100, type=int),
             search=request.args.get("search"),
             user=request.args.get("user"),
             status=request.args.get("status"),

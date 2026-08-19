@@ -4,11 +4,11 @@
 """
 
 import logging
-from typing import Any
 
-from flask import Blueprint, render_template, current_app, request
+from flask import Blueprint, current_app, render_template, request
 
 from app.api.printer_client import PrinterMonitorClient
+from app.utils import sort_items
 
 printers_bp = Blueprint("printers", __name__)
 
@@ -31,6 +31,15 @@ def _get_client() -> PrinterMonitorClient:
     return PrinterMonitorClient(current_app.config["PRINTER_API_URL"])
 
 
+def _get_toner_threshold(client: PrinterMonitorClient) -> int:
+    """Порог критического тонера из API (по умолчанию 20)."""
+    try:
+        return client.get_threshold().get("threshold", 20)
+    except Exception as e:
+        logger.error("Printer Monitor threshold error: %s", e)
+        return 20
+
+
 @printers_bp.route("/")
 def printers_list() -> str:
     """Страница списка принтеров.
@@ -50,37 +59,9 @@ def printers_list() -> str:
     return render_template(
         "printers.html",
         printers=printers,
+        toner_threshold=_get_toner_threshold(client),
         unavailable_services=unavailable_services,
     )
-
-
-def _sort_printers(printers: list[dict[str, Any]], sort_by: str, order: str) -> list[dict[str, Any]]:
-    """Сортировать список принтеров.
-
-    Args:
-        printers: Список принтеров.
-        sort_by: Поле сортировки.
-        order: Направление (asc/desc).
-
-    Returns:
-        Отсортированный список.
-    """
-    if sort_by not in SORT_FIELDS:
-        return printers
-
-    field = SORT_FIELDS[sort_by]
-    reverse = order == "desc"
-
-    def get_sort_key(p: dict) -> Any:
-        val = p.get(field, 0)
-        if isinstance(val, str):
-            try:
-                return float(val)
-            except ValueError:
-                return 0
-        return val or 0
-
-    return sorted(printers, key=get_sort_key, reverse=reverse)
 
 
 @printers_bp.route("/htmx/list")
@@ -100,11 +81,12 @@ def htmx_printers_list() -> str:
         printers = []
         logger.error("Printer Monitor API error: %s", e)
 
-    printers = _sort_printers(printers, sort_by, order)
+    printers = sort_items(printers, sort_by, order, SORT_FIELDS)
 
     return render_template(
         "partials/_printer_list.html",
         printers=printers,
+        toner_threshold=_get_toner_threshold(client),
         sort_by=sort_by,
         order=order
     )

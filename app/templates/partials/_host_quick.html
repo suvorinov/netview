@@ -1,0 +1,32 @@
+<!-- Критическая нагрузка хостов на Dashboard -->
+{% if critical_hosts %}
+<div class="space-y-3">
+    {% for host in critical_hosts %}
+    {% set load = [host.ram_percent|default(0), host.disk_percent|default(0)]|max %}
+    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-server text-gray-400"></i>
+            <div>
+                <p class="font-medium">{{ host.hostname }}</p>
+                {% if host.current_user %}
+                    <p class="text-[0.7em] leading-tight text-gray-500 dark:text-gray-400">{{ host.current_user }}</p>
+                {% endif %}
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    RAM {{ "%.0f"|format(host.ram_percent|default(0)) }}% · Диск {{ "%.0f"|format(host.disk_percent|default(0)) }}%
+                </p>
+            </div>
+        </div>
+        <span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+            {{ "%.0f"|format(load) }}%
+        </span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-gray-500 dark:text-gray-400 text-center py-4">
+    <i class="fas fa-check-circle text-green-500 mr-1"></i>Критических нагрузок нет
+</p>
+{% endif %}
+<a href="/hosts/" class="block text-center text-blue-500 hover:underline mt-3">
+    Показать все ({{ host_count }})
+</a>

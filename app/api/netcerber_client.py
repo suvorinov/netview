@@ -4,58 +4,16 @@
 локальной сети, сканирование, авторизация и оповещения.
 """
 
-from typing import Any, Optional
+from typing import Any
 
-import requests
+from app.api.base import BaseApiClient
 
 
-class NetCerberClient:
-    """Клиент для работы с NetCerber API.
-
-    Attributes:
-        base_url: Базовый URL API.
-        timeout: Таймаут запросов в секундах.
-    """
+class NetCerberClient(BaseApiClient):
+    """Клиент для работы с NetCerber API."""
 
     def __init__(self, base_url: str, timeout: int = 15) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-
-    def _get(self, path: str, params: Optional[dict] = None) -> Any:
-        response = requests.get(
-            f"{self.base_url}{path}",
-            params=params,
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
-
-    def _post(self, path: str, params: Optional[dict] = None, json: Optional[dict] = None) -> Any:
-        response = requests.post(
-            f"{self.base_url}{path}",
-            params=params,
-            json=json,
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
-
-    def _patch(self, path: str, json: Optional[dict] = None) -> Any:
-        response = requests.patch(
-            f"{self.base_url}{path}",
-            json=json,
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
-
-    def _delete(self, path: str) -> Any:
-        response = requests.delete(
-            f"{self.base_url}{path}",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        super().__init__(base_url, timeout)
 
     # ── Health / Stats ──────────────────────────────────────────
 
@@ -69,8 +27,8 @@ class NetCerberClient:
 
     def get_devices(
         self,
-        authorized: Optional[bool] = None,
-        unauthorized: Optional[bool] = None,
+        authorized: bool | None = None,
+        unauthorized: bool | None = None,
         sort_by: str = "last_seen",
         skip: int = 0,
         limit: int = 100,
@@ -89,7 +47,7 @@ class NetCerberClient:
         return self._get(f"/api/v1/devices/{device_id}")
 
     def update_device(self, device_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        return self._patch(f"/api/v1/devices/{device_id}", data)
+        return self._patch(f"/api/v1/devices/{device_id}", json=data)
 
     def delete_device(self, device_id: int) -> dict[str, Any]:
         return self._delete(f"/api/v1/devices/{device_id}")
@@ -110,7 +68,7 @@ class NetCerberClient:
     def get_scans(self, limit: int = 50, skip: int = 0) -> dict[str, Any]:
         return self._get("/api/v1/scans", {"limit": limit, "skip": skip})
 
-    def get_baseline_scan(self) -> Optional[dict[str, Any]]:
+    def get_baseline_scan(self) -> dict[str, Any] | None:
         return self._get("/api/v1/scans/baseline")
 
     def get_scan(self, scan_id: int) -> dict[str, Any]:
@@ -128,7 +86,7 @@ class NetCerberClient:
     # ── Alerts ──────────────────────────────────────────────────
 
     def get_alerts(
-        self, limit: int = 50, skip: int = 0, alert_type: Optional[str] = None
+        self, limit: int = 50, skip: int = 0, alert_type: str | None = None
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"limit": limit, "skip": skip}
         if alert_type:

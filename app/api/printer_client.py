@@ -5,26 +5,14 @@
 
 from typing import Any
 
-import requests
+from app.api.base import BaseApiClient
 
 
-class PrinterMonitorClient:
-    """Клиент для работы с Printer Monitor API.
-
-    Attributes:
-        base_url: Базовый URL API.
-        timeout: Таймаут запросов в секундах.
-    """
+class PrinterMonitorClient(BaseApiClient):
+    """Клиент для работы с Printer Monitor API."""
 
     def __init__(self, base_url: str, timeout: int = 20) -> None:
-        """Инициализация клиента.
-
-        Args:
-            base_url: Базовый URL Printer Monitor API.
-            timeout: Таймаут запросов.
-        """
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
+        super().__init__(base_url, timeout)
 
     def get_printers(self) -> list[dict[str, Any]]:
         """Получить список всех принтеров.
@@ -32,12 +20,7 @@ class PrinterMonitorClient:
         Returns:
             Список информации о принтерах.
         """
-        response = requests.get(
-            f"{self.base_url}/api/printers",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get("/api/printers")
 
     def get_printer(self, ip: str) -> dict[str, Any]:
         """Получить информацию о конкретном принтере.
@@ -48,12 +31,7 @@ class PrinterMonitorClient:
         Returns:
             Информация о принтере.
         """
-        response = requests.get(
-            f"{self.base_url}/api/printers/{ip}",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get(f"/api/printers/{ip}")
 
     def check_printers(self) -> dict[str, Any]:
         """Выполнить принудительную проверку принтеров.
@@ -61,12 +39,7 @@ class PrinterMonitorClient:
         Returns:
             Результат проверки.
         """
-        response = requests.post(
-            f"{self.base_url}/api/check",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._post("/api/check")
 
     def get_status(self) -> dict[str, Any]:
         """Получить статус системы мониторинга.
@@ -74,12 +47,7 @@ class PrinterMonitorClient:
         Returns:
             Статус системы.
         """
-        response = requests.get(
-            f"{self.base_url}/api/status",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get("/api/status")
 
     def get_threshold(self) -> dict[str, Any]:
         """Получить порог уведомления о низком тонере.
@@ -87,12 +55,7 @@ class PrinterMonitorClient:
         Returns:
             Текущий порог.
         """
-        response = requests.get(
-            f"{self.base_url}/api/threshold",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get("/api/threshold")
 
     def set_threshold(self, threshold: int) -> dict[str, Any]:
         """Установить порог уведомления о низком тонере.
@@ -103,13 +66,7 @@ class PrinterMonitorClient:
         Returns:
             Установленное значение.
         """
-        response = requests.put(
-            f"{self.base_url}/api/threshold",
-            json={"threshold": threshold},
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._put("/api/threshold", json={"threshold": threshold})
 
     def get_check_interval(self) -> dict[str, Any]:
         """Получить текущий интервал проверки.
@@ -117,12 +74,7 @@ class PrinterMonitorClient:
         Returns:
             Текущий интервал.
         """
-        response = requests.get(
-            f"{self.base_url}/api/check-interval",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get("/api/check-interval")
 
     def set_check_interval(self, interval: int) -> dict[str, Any]:
         """Установить интервал проверки.
@@ -133,10 +85,4 @@ class PrinterMonitorClient:
         Returns:
             Установленное значение.
         """
-        response = requests.put(
-            f"{self.base_url}/api/check-interval",
-            json={"interval": interval},
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._put("/api/check-interval", json={"interval": interval})

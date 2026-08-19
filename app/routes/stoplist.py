@@ -6,7 +6,7 @@
 
 import logging
 
-from flask import Blueprint, render_template, request, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app.api.logspy_client import LogSpyClient
 

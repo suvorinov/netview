@@ -5,7 +5,7 @@
 
 import logging
 
-from flask import Blueprint, render_template, current_app, request, jsonify
+from flask import Blueprint, current_app, render_template, request
 
 from app.api.printer_client import PrinterMonitorClient
 

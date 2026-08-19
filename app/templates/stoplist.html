@@ -77,6 +77,8 @@
 </div>
 
 <script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
 function addWords(e) {
     e.preventDefault();
     const words = document.getElementById('add-words').value;
@@ -84,7 +86,10 @@ function addWords(e) {
 
     fetch('/stoplist/add', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken
+        },
         body: 'words=' + encodeURIComponent(words)
     })
     .then(r => r.json())
@@ -114,7 +119,10 @@ function replaceAll(e) {
 
     fetch('/stoplist/replace', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken
+        },
         body: 'words=' + encodeURIComponent(words)
     })
     .then(r => r.json())
@@ -142,7 +150,10 @@ function removeWord(word) {
 
     fetch('/stoplist/remove', {
         method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken
+        },
         body: 'word=' + encodeURIComponent(word)
     })
     .then(r => r.json())

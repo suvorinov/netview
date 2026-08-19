@@ -36,6 +36,7 @@
             <form hx-put="/settings/htmx/threshold"
                   hx-target="#threshold-result"
                   hx-swap="innerHTML">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="flex items-center gap-3">
                     <input type="number"
                            name="threshold"
@@ -62,6 +63,7 @@
             <form hx-put="/settings/htmx/interval"
                   hx-target="#interval-result"
                   hx-swap="innerHTML">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="flex items-center gap-3">
                     <select name="interval"
                             class="px-3 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500">

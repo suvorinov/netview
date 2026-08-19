@@ -3,35 +3,23 @@
 Модуль для взаимодействия с Host Monitor API.
 """
 
-from typing import Any, Optional
+from typing import Any
 
-import requests
+from app.api.base import BaseApiClient
 
 
-class HostMonitorClient:
-    """Клиент для работы с Host Monitor API.
-
-    Attributes:
-        base_url: Базовый URL API.
-        timeout: Таймаут запросов в секундах.
-    """
+class HostMonitorClient(BaseApiClient):
+    """Клиент для работы с Host Monitor API."""
 
     def __init__(self, base_url: str, timeout: int = 10) -> None:
-        """Инициализация клиента.
-
-        Args:
-            base_url: Базовый URL Host Monitor API.
-            timeout: Таймаут запросов.
-        """
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
+        super().__init__(base_url, timeout)
 
     def get_hosts(
         self,
-        q: Optional[str] = None,
-        status: Optional[str] = None,
+        q: str | None = None,
+        status: str | None = None,
         page: int = 1,
-        limit: int = 50
+        limit: int = 50,
     ) -> dict[str, Any]:
         """Получить список хостов с пагинацией.
 
@@ -50,13 +38,7 @@ class HostMonitorClient:
         if status:
             params["status"] = status
 
-        response = requests.get(
-            f"{self.base_url}/api/v1/hosts",
-            params=params,
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get("/api/v1/hosts", params)
 
     def get_host(self, hostname: str) -> dict[str, Any]:
         """Получить информацию о конкретном хосте.
@@ -67,12 +49,7 @@ class HostMonitorClient:
         Returns:
             Информация о хосте.
         """
-        response = requests.get(
-            f"{self.base_url}/api/v1/hosts/{hostname}",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get(f"/api/v1/hosts/{hostname}")
 
     def get_stats(self) -> dict[str, Any]:
         """Получить статистику по хостам.
@@ -80,9 +57,4 @@ class HostMonitorClient:
         Returns:
             Статистика: количество хостов, средние нагрузки.
         """
-        response = requests.get(
-            f"{self.base_url}/api/v1/hosts/stats",
-            timeout=self.timeout
-        )
-        response.raise_for_status()
-        return response.json()
+        return self._get("/api/v1/hosts/stats")

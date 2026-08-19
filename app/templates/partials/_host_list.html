@@ -108,6 +108,9 @@
                         <i class="fas fa-server text-gray-400"></i>
                         <div>
                             {{ host.hostname }}
+                            {% if host.current_user %}
+                            <p class="text-[0.7em] leading-tight text-gray-500 dark:text-gray-400">{{ host.current_user }}</p>
+                            {% endif %}
                             {% if host.status == 'OFFLINE' and host.last_seen %}
                             <p class="text-xs text-red-400">вне сети {{ host.last_seen|time_ago }} назад</p>
                             {% endif %}
@@ -160,17 +163,3 @@
         </tbody>
     </table>
 </div>
-
-<!-- Пагинация -->
-{% if total_pages|default(1) > 1 %}
-<div class="flex justify-center gap-2 mt-4 p-4">
-    {% for p in range(1, total_pages + 1) %}
-    <button hx-get="/hosts/htmx/list?page={{ p }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}&order={{ order }}{% endif %}"
-            hx-target="#hosts-list"
-            hx-swap="innerHTML"
-            class="px-3 py-1 rounded {% if p == current_page %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}">
-        {{ p }}
-    </button>
-    {% endfor %}
-</div>
-{% endif %}

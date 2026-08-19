@@ -4,11 +4,11 @@
 """
 
 import logging
-from typing import Any
 
-from flask import Blueprint, render_template, current_app, request
+from flask import Blueprint, current_app, render_template, request
 
 from app.api.host_client import HostMonitorClient
+from app.utils import sort_items
 
 hosts_bp = Blueprint("hosts", __name__)
 
@@ -45,7 +45,8 @@ def hosts_list() -> str:
     client = _get_client()
     unavailable_services = []
     try:
-        data = client.get_hosts(page=1, limit=50)
+        # Пагинация не используется: показываем все хосты одним списком
+        data = client.get_hosts(page=1, limit=500)
         hosts = data.get("items", [])
         stats = client.get_stats()
     except Exception as e:
@@ -62,32 +63,6 @@ def hosts_list() -> str:
     )
 
 
-def _sort_hosts(hosts: list[dict[str, Any]], sort_by: str, order: str) -> list[dict[str, Any]]:
-    """Сортировать список хостов.
-
-    Args:
-        hosts: Список хостов.
-        sort_by: Поле сортировки.
-        order: Направление (asc/desc).
-
-    Returns:
-        Отсортированный список.
-    """
-    if sort_by not in SORT_FIELDS:
-        return hosts
-
-    field = SORT_FIELDS[sort_by]
-    reverse = order == "desc"
-
-    def get_sort_key(h: dict) -> Any:
-        val = h.get(field, "")
-        if isinstance(val, (int, float)):
-            return val
-        return val or ""
-
-    return sorted(hosts, key=get_sort_key, reverse=reverse)
-
-
 @hosts_bp.route("/htmx/list")
 def htmx_hosts_list() -> str:
     """HTMX: список хостов для частичной загрузки.
@@ -96,27 +71,22 @@ def htmx_hosts_list() -> str:
         HTML-фрагмент со списком хостов.
     """
     client = _get_client()
-    page = request.args.get("page", 1, type=int)
     status_filter = request.args.get("status", None)
     sort_by = request.args.get("sort", "")
     order = request.args.get("order", "asc")
 
     try:
-        data = client.get_hosts(page=page, limit=50, status=status_filter)
+        data = client.get_hosts(page=1, limit=500, status=status_filter)
         hosts = data.get("items", [])
-        total_pages = data.get("total_pages", 1)
     except Exception as e:
         hosts = []
-        total_pages = 1
         logger.error("Host Monitor API error: %s", e)
 
-    hosts = _sort_hosts(hosts, sort_by, order)
+    hosts = sort_items(hosts, sort_by, order, SORT_FIELDS)
 
     return render_template(
         "partials/_host_list.html",
         hosts=hosts,
-        current_page=page,
-        total_pages=total_pages,
         status_filter=status_filter,
         sort_by=sort_by,
         order=order
