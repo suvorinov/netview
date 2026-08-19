@@ -42,11 +42,13 @@ class Config:
     SECRET_KEY_IS_RANDOM = "SECRET_KEY" not in os.environ
     SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
+    # Внутренние сервисы задаются через env-переменные; дефолт — локальная
+    # разработка (сервисы на том же хосте).
     PRINTER_API_URL = os.environ.get("PRINTER_API_URL", "http://localhost:8101")
     HOST_API_URL = os.environ.get("HOST_API_URL", "http://localhost:8102")
     LOGSPY_API_URL = os.environ.get("LOGSPY_API_URL", "http://localhost:8103")
     NETCERBER_API_URL = os.environ.get("NETCERBER_API_URL", "http://localhost:8104")
-    AD_DOMAIN = os.environ.get("AD_DOMAIN", "AD.LOCAL")
+    AD_DOMAIN = os.environ.get("AD_DOMAIN", "")
 
     # Формат: "user1:pass1,user2:pass2"
     AUTH_USERS = os.environ.get("AUTH_USERS", "")
