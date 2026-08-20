@@ -49,7 +49,11 @@
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             {% for printer in printers %}
-            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {% if printer.ip and printer.model != 'N/A' %}cursor-pointer{% endif %}"
+                {% if printer.ip and printer.model != 'N/A' %}
+                onclick="window.open('http://{{ printer.ip }}', '_blank',)"
+                title="Открыть веб-интерфейс принтера ({{ printer.ip }})"
+                {% endif %}>
                 <td class="px-4 py-3">
                     <div class="flex items-center gap-2">
                         <i class="fas fa-print text-gray-400"></i>
