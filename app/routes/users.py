@@ -10,7 +10,7 @@ import re
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app.api.logspy_client import LogSpyClient
-from app.utils import human_size
+from app.utils import format_duration, human_size
 
 users_bp = Blueprint("users", __name__)
 
@@ -106,6 +106,7 @@ def detail(username: str):
     activity = None
     blocked_records = []
     all_records = []
+    all_data: dict = {}
 
     if current_log:
         try:
@@ -121,7 +122,42 @@ def detail(username: str):
             blocked_records = [
                 r for r in all_records if r.get("is_blocked")
             ]
-            domains = list({r["domain"] for r in all_records if r.get("domain")})
+        except Exception as e:
+            logger.error("LogSpy API (user records=%s) error: %s", username, e)
+            unavailable_services.append("LogSpy")
+
+        # Точная статистика за весь файл — серверная агрегация LogSpy.
+        server_stats = None
+        try:
+            server_stats = client.get_ad_user_activity(user_upn, current_log)
+        except Exception as e:
+            logger.error("LogSpy API (user activity=%s) error: %s", username, e)
+            unavailable_services.append("LogSpy")
+
+        if server_stats:
+            activity = {
+                "username": username,
+                "total_requests": server_stats.get("total_requests", 0),
+                "total_traffic": server_stats.get("total_traffic", 0),
+                "total_traffic_formatted": (
+                    server_stats.get("total_traffic_formatted")
+                    or human_size(server_stats.get("total_traffic", 0))
+                ),
+                "blocked_requests": server_stats.get("blocked_requests", 0),
+                "time_on_blocked": server_stats.get("time_on_blocked", 0),
+                "time_on_blocked_formatted": format_duration(
+                    server_stats.get("time_on_blocked", 0)
+                ),
+                "domains_visited": sorted(
+                    server_stats.get("domains_visited") or []
+                ),
+                "last_activity": server_stats.get("last_activity", ""),
+                "records_shown": len(all_records),
+                "blocked_shown": len(blocked_records),
+            }
+        else:
+            # Фолбэк: оценка по последним 500 записям выборки.
+            domains = sorted({r["domain"] for r in all_records if r.get("domain")})
             total_traffic = sum(r.get("size", 0) for r in all_records)
 
             last_activity = ""
@@ -151,18 +187,18 @@ def detail(username: str):
                 "total_traffic": total_traffic,
                 "total_traffic_formatted": human_size(total_traffic),
                 "blocked_requests": blocked_total,
-                "domains_visited": sorted(domains),
+                "time_on_blocked": None,
+                "time_on_blocked_formatted": "—",
+                "domains_visited": domains,
                 "last_activity": last_activity,
                 "records_shown": len(all_records),
                 "blocked_shown": len(blocked_records),
             }
-        except Exception as e:
-            logger.error("LogSpy API (user activity=%s) error: %s", username, e)
-            unavailable_services.append("LogSpy")
 
     return render_template(
         "user_detail.html",
         user=user,
+        user_upn=user_upn,
         activity=activity,
         blocked_records=blocked_records,
         all_records=all_records,

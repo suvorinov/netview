@@ -36,6 +36,30 @@ def human_size(b: Any) -> str:
     return f"{b:.1f} EB"
 
 
+def format_duration(seconds: Any) -> str:
+    """Преобразовать длительность в секундах в "м:сс" или "ч:мм:сс".
+
+    Args:
+        seconds: Длительность в секундах (число или строка).
+
+    Returns:
+        Строка вида "2:30" или "1:05:12". Для некорректных значений — "—".
+    """
+    if seconds is None:
+        return "—"
+    try:
+        seconds = int(float(seconds))
+    except (TypeError, ValueError):
+        return "—"
+    if seconds < 0:
+        return "—"
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
 def _is_number(value: Any) -> bool:
     """Проверить, что строка является числом (например, "75.5")."""
     try:

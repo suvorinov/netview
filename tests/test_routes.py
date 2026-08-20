@@ -28,7 +28,37 @@ def mock_api_clients(monkeypatch):
         lambda self: {"total": 0, "online": 0, "offline": 0, "avg_cpu": 0},
     )
     monkeypatch.setattr(HostMonitorClient, "get_host", lambda self, hostname: {})
-    monkeypatch.setattr(LogSpyClient, "get_logs", lambda self: [])
+    monkeypatch.setattr(LogSpyClient, "get_logs", lambda self: [{"name": "access.log"}])
+    monkeypatch.setattr(LogSpyClient, "get_current_log", lambda self: "access.log")
+    monkeypatch.setattr(
+        LogSpyClient, "get_data",
+        lambda self, filename, **kwargs: {
+            "records": [],
+            "pagination": {"total_records": 0},
+        },
+    )
+    monkeypatch.setattr(
+        LogSpyClient, "get_ad_user",
+        lambda self, username: {
+            "sAMAccountName": username,
+            "displayName": "Тест Тестович",
+            "distinguishedName": f"CN={username},OU=ZR,DC=zr,DC=local",
+            "enabled": True,
+        },
+    )
+    monkeypatch.setattr(
+        LogSpyClient, "get_ad_user_activity",
+        lambda self, username, filename: {
+            "username": username,
+            "total_requests": 1682,
+            "total_traffic": 85302169,
+            "total_traffic_formatted": "81.35 MB",
+            "blocked_requests": 119,
+            "time_on_blocked": 150.18,
+            "domains_visited": ["yandex.ru", "vk.com"],
+            "last_activity": "2026-08-20 08:10:01",
+        },
+    )
     monkeypatch.setattr(LogSpyClient, "get_ad_stats", lambda self: {})
     monkeypatch.setattr(LogSpyClient, "get_stoplist", lambda self: {"total": 0})
     monkeypatch.setattr(LogSpyClient, "get_ad_users", lambda self, **kwargs: [])
@@ -99,6 +129,28 @@ def test_critical_printers_excludes_na():
     ]
     result = _critical_printers(printers, toner_threshold=25)
     assert [p["name"] for p in result] == ["Buh", "Kooperacia"]
+
+
+def test_user_detail_shows_server_stats(logged_client):
+    """Карточка пользователя показывает серверную статистику за весь файл."""
+    html = logged_client.get("/users/Valentin.Gorohov").get_data(as_text=True)
+    assert "1682" in html          # всего запросов
+    assert "81.35 MB" in html      # трафик за файл
+    assert "2:30" in html          # время на заблокированных (150.18 сек)
+    assert "Открыть в Логах" in html
+    assert "yandex.ru" in html
+
+
+def test_user_detail_fallback_when_activity_unavailable(logged_client, monkeypatch):
+    """Если серверный endpoint activity недоступен — фолбэк без падения."""
+    from app.api.logspy_client import LogSpyClient
+
+    def boom(*args, **kwargs):
+        raise ConnectionError("LogSpy down")
+
+    monkeypatch.setattr(LogSpyClient, "get_ad_user_activity", boom)
+    response = logged_client.get("/users/Valentin.Gorohov")
+    assert response.status_code == 200
 
 
 def test_404_page():
