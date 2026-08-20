@@ -1,0 +1,5 @@
+{% include "partials/_netcerber_message.html" %}
+<!-- После авторизации всех устройств обновляем список в фоне -->
+<div id="device-list" hx-swap-oob="true">
+    {% include "partials/_netcerber_device_list.html" %}
+</div>

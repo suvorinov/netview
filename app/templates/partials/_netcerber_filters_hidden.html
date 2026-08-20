@@ -1,0 +1,9 @@
+<!-- Текущие параметры списка устройств (для сохранения вида после действия) -->
+<input type="hidden" name="cat" value="{{ cat }}">
+<input type="hidden" name="q" value="{{ q }}">
+<input type="hidden" name="sort" value="{{ sort_by }}">
+<input type="hidden" name="order" value="{{ order }}">
+<input type="hidden" name="skip" value="{{ skip }}">
+<input type="hidden" name="limit" value="{{ limit }}">
+{% if authorized %}<input type="hidden" name="authorized" value="1">{% endif %}
+{% if unauthorized %}<input type="hidden" name="unauthorized" value="1">{% endif %}

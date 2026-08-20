@@ -50,6 +50,11 @@ class Config:
     NETCERBER_API_URL = os.environ.get("NETCERBER_API_URL", "http://localhost:8104")
     AD_DOMAIN = os.environ.get("AD_DOMAIN", "")
 
+    # Диапазон DHCP-пула в формате "192.168.0.31,192.168.0.199".
+    # Используется как признак "устройство в DHCP-пуле" в NetCerber.
+    # Пустая строка — признак выключен.
+    DHCP_POOL = os.environ.get("DHCP_POOL", "")
+
     # Формат: "user1:pass1,user2:pass2"
     AUTH_USERS = os.environ.get("AUTH_USERS", "")
 

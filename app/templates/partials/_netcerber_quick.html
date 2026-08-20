@@ -1,0 +1,48 @@
+<!-- Сетевые угрозы NetCerber на Dashboard -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+        <p class="text-2xl font-bold text-blue-600">{{ nc_new_count }}</p>
+        <p class="text-xs text-gray-500 mt-1">Новых устройств (7 дней)</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+        <p class="text-2xl font-bold text-yellow-600">{{ nc_router }}</p>
+        <p class="text-xs text-gray-500 mt-1">Сетевое оборудование?</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+        <p class="text-2xl font-bold text-gray-700 dark:text-gray-300">{{ nc_unknown }}</p>
+        <p class="text-xs text-gray-500 mt-1">Неизвестные устройства</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+        <p class="text-2xl font-bold {% if nc_alerts_total > 0 %}text-red-600{% else %}text-gray-700 dark:text-gray-300{% endif %}">{{ nc_alerts_total }}</p>
+        <p class="text-xs text-gray-500 mt-1">Оповещений</p>
+    </div>
+</div>
+
+{% if nc_new_top %}
+<div class="space-y-2">
+    {% for d in nc_new_top %}
+    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div class="flex items-center gap-3 min-w-0">
+            <i class="fas fa-network-wired text-blue-500"></i>
+            <div class="min-w-0">
+                <p class="font-medium truncate">{{ d.hostname }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ d.ip_address }} | {{ d.vendor }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 ml-3">
+            {% if d._flags is defined and d._flags.router %}
+            <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Сетевое оборудование?</span>
+            {% endif %}
+            <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Новое</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center text-sm text-gray-500 py-6">
+    <i class="fas fa-check-circle text-green-500 mr-1"></i>Новых устройств не обнаружено
+</div>
+{% endif %}
+<div class="mt-4">
+    <a href="/netcerber/" class="text-sm text-blue-500 hover:text-blue-700">Открыть NetCerber →</a>
+</div>

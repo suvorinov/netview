@@ -6,25 +6,8 @@
 {% block content %}
 {% include "partials/_service_alert.html" %}
 <div class="mb-4 flex flex-wrap gap-2 items-center">
-    <div class="flex gap-1 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-        <button class="px-3 py-1.5 text-sm rounded-md {% if not authorized and not unauthorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
-                hx-get="/netcerber/htmx/list"
-                hx-target="#device-list"
-                hx-swap="innerHTML">
-            Все
-        </button>
-        <button class="px-3 py-1.5 text-sm rounded-md {% if authorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
-                hx-get="/netcerber/htmx/list?authorized=1"
-                hx-target="#device-list"
-                hx-swap="innerHTML">
-            Авторизованные
-        </button>
-        <button class="px-3 py-1.5 text-sm rounded-md {% if unauthorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
-                hx-get="/netcerber/htmx/list?unauthorized=1"
-                hx-target="#device-list"
-                hx-swap="innerHTML">
-            Неавторизованные
-        </button>
+    <div id="auth-tabs">
+        {% include "partials/_netcerber_auth_tabs.html" %}
     </div>
 
     <button hx-post="/netcerber/htmx/authorize-all"
@@ -36,6 +19,12 @@
         Авторизовать все
     </button>
 
+    <a href="/netcerber/export?format=csv"
+       class="px-3 py-1.5 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center gap-1">
+        <i class="fas fa-file-csv"></i>
+        Экспорт CSV
+    </a>
+
     <a href="/netcerber/scans/"
        class="px-3 py-1.5 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 flex items-center gap-1">
         <i class="fas fa-history"></i>
@@ -44,6 +33,24 @@
 </div>
 
 <div id="message-area" class="mb-4"></div>
+
+<div class="mb-4">
+    <input type="search"
+           name="q"
+           value="{{ q }}"
+           placeholder="Поиск по IP, MAC, hostname, вендору..."
+           hx-get="/netcerber/htmx/list"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#device-list"
+           hx-swap="innerHTML"
+           hx-params="q"
+           class="w-full md:w-96 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+</div>
+
+<!-- Подозрительные устройства -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6" id="suspect-chips">
+    {% include "partials/_netcerber_suspect_chips.html" %}
+</div>
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow" id="stats-area"
      hx-get="/netcerber/htmx/stats"
@@ -58,6 +65,36 @@
     </div>
     <div id="device-list">
         {% include "partials/_netcerber_device_list.html" %}
+    </div>
+</div>
+
+<!-- Device Detail Modal -->
+<div id="device-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <div id="device-modal-content">
+            <div class="p-6 text-center text-gray-500">
+                <i class="fas fa-spinner fa-spin text-2xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow mt-6">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+        <span class="font-semibold">
+            <i class="fas fa-bell text-red-500 mr-2"></i>
+            Оповещения NetCerber
+        </span>
+        <span class="text-xs text-gray-500">Последние 10</span>
+    </div>
+    <div id="alerts-area"
+         hx-get="/netcerber/htmx/alerts?limit=10"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="p-6 text-center text-gray-500">
+            <i class="fas fa-spinner fa-spin text-2xl"></i>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -1,0 +1,20 @@
+<div class="flex gap-1 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+    <button class="px-3 py-1.5 text-sm rounded-md {% if not authorized and not unauthorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        Все
+    </button>
+    <button class="px-3 py-1.5 text-sm rounded-md {% if authorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list?authorized=1"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        Авторизованные
+    </button>
+    <button class="px-3 py-1.5 text-sm rounded-md {% if unauthorized %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list?unauthorized=1"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        Неавторизованные
+    </button>
+</div>

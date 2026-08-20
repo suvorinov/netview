@@ -43,20 +43,28 @@
 
     <div class="mt-6 flex gap-2">
         {% if device.is_authorized %}
-        <button hx-post="/netcerber/htmx/unauthorize/{{ device.id }}"
-                hx-target="#device-modal-content"
-                hx-swap="innerHTML"
-                hx-confirm="Снять авторизацию устройства?"
-                class="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm">
-            <i class="fas fa-ban mr-1"></i> Деавторизовать
-        </button>
+        <form hx-post="/netcerber/htmx/unauthorize/{{ device.id }}"
+              hx-target="#device-modal-content"
+              hx-swap="innerHTML"
+              hx-confirm="Снять авторизацию устройства?"
+              class="flex-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% include "partials/_netcerber_filters_hidden.html" %}
+            <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm">
+                <i class="fas fa-ban mr-1"></i> Деавторизовать
+            </button>
+        </form>
         {% else %}
-        <button hx-post="/netcerber/htmx/authorize/{{ device.id }}"
-                hx-target="#device-modal-content"
-                hx-swap="innerHTML"
-                class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
-            <i class="fas fa-check mr-1"></i> Авторизовать
-        </button>
+        <form hx-post="/netcerber/htmx/authorize/{{ device.id }}"
+              hx-target="#device-modal-content"
+              hx-swap="innerHTML"
+              class="flex-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% include "partials/_netcerber_filters_hidden.html" %}
+            <button type="submit" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                <i class="fas fa-check mr-1"></i> Авторизовать
+            </button>
+        </form>
         {% endif %}
         <button onclick="document.getElementById('device-modal').classList.add('hidden')"
                 class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-sm">
@@ -64,3 +72,9 @@
         </button>
     </div>
 </div>
+{% if oob %}
+<!-- После авторизации/деавторизации обновляем список в фоне -->
+<div id="device-list" hx-swap-oob="true">
+    {% include "partials/_netcerber_device_list.html" %}
+</div>
+{% endif %}

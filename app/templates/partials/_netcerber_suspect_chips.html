@@ -1,0 +1,39 @@
+<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h3 class="font-semibold flex items-center gap-2">
+        <i class="fas fa-shield-halved text-yellow-500"></i>
+        Подозрительные устройства
+    </h3>
+    <span class="text-xs text-gray-500">Признаки: сетевое оборудование / новое за 7 дней / неизвестное</span>
+</div>
+<div class="flex flex-wrap gap-1">
+    <button class="px-3 py-1.5 text-sm rounded-md {% if not cat %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        Все
+    </button>
+    <button class="px-3 py-1.5 text-sm rounded-md {% if cat == 'router' %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list?cat=router"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        <i class="fas fa-wifi mr-1"></i> Сетевое оборудование? ({{ counts.router|default(0) }})
+    </button>
+    <button class="px-3 py-1.5 text-sm rounded-md {% if cat == 'new' %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list?cat=new"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        <i class="fas fa-plus-circle mr-1"></i> Новые ({{ counts.new|default(0) }})
+    </button>
+    <button class="px-3 py-1.5 text-sm rounded-md {% if cat == 'unknown' %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list?cat=unknown"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        <i class="fas fa-question-circle mr-1"></i> Неизвестные ({{ counts.unknown|default(0) }})
+    </button>
+    <button class="px-3 py-1.5 text-sm rounded-md {% if cat == 'dhcp' %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}"
+            hx-get="/netcerber/htmx/list?cat=dhcp"
+            hx-target="#device-list"
+            hx-swap="innerHTML">
+        <i class="fas fa-plug mr-1"></i> В DHCP-пуле ({{ counts.dhcp|default(0) }})
+    </button>
+</div>

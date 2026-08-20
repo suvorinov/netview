@@ -1,8 +1,14 @@
 <div class="flex items-center gap-3 text-sm">
     {% if scan_status and scan_status.get('is_running') %}
-    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-        <i class="fas fa-spinner fa-spin mr-1"></i> Сканирование...
-    </span>
+    <div class="flex items-center gap-3"
+         hx-get="/netcerber/htmx/scan-status"
+         hx-trigger="every 5s"
+         hx-swap="outerHTML">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            <i class="fas fa-spinner fa-spin mr-1"></i> Сканирование...
+        </span>
+        <span class="text-gray-500 text-xs">обновляется автоматически</span>
+    </div>
     {% elif last_scan %}
     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
         <i class="fas fa-check-circle mr-1"></i> Последнее: {{ (last_scan.finished_at or last_scan.started_at)|datetime }}
@@ -14,3 +20,11 @@
     <span class="text-gray-500 text-xs">Сканирований не было</span>
     {% endif %}
 </div>
+{% if oob and not (scan_status and scan_status.get('is_running')) %}
+<!-- После завершения сканирования обновляем журнал (hx-swap-oob) -->
+<div id="scan-list"
+     hx-swap-oob="true"
+     hx-get="/netcerber/htmx/scans"
+     hx-trigger="load"
+     hx-swap="innerHTML"></div>
+{% endif %}

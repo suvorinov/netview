@@ -1,7 +1,19 @@
+{% if flash %}
+<div class="mb-3 px-3 py-2 rounded-lg text-sm flex items-center gap-2 {% if flash[0] %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+    <i class="fas fa-{% if flash[0] %}check-circle{% else %}exclamation-circle{% endif %}"></i>
+    <span>{{ flash[1] }}</span>
+</div>
+{% endif %}
+{% if oob %}
+<span id="scan-total" hx-swap-oob="true" class="text-sm text-gray-500">Всего: {{ total }}</span>
+{% endif %}
 <div class="overflow-x-auto">
     <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>
+                <th class="px-4 py-3 text-center text-sm font-medium w-8">
+                    <input type="checkbox" id="scan-select-all" class="scan-check-all" title="Выбрать все">
+                </th>
                 <th class="px-4 py-3 text-left text-sm font-medium">ID</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Начало</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Окончание</th>
@@ -16,6 +28,12 @@
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             {% for scan in scans %}
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-4 py-3 text-center">
+                    <input type="checkbox" name="scan_ids" value="{{ scan.id }}"
+                           form="scan-batch-form" class="scan-check"
+                           {% if scan.id == baseline_id %}disabled{% endif %}
+                           title="{% if scan.id == baseline_id %}Эталонный снимок нельзя удалить{% endif %}">
+                </td>
                 <td class="px-4 py-3 text-sm font-mono">{{ scan.id }}</td>
                 <td class="px-4 py-3 text-sm">{{ scan.started_at|datetime }}</td>
                 <td class="px-4 py-3 text-sm">{{ scan.finished_at|datetime }}</td>
@@ -38,10 +56,11 @@
                     <i class="fas fa-star text-yellow-500" title="Эталонный снимок"></i>
                     {% else %}
                     <form hx-post="/netcerber/htmx/set-baseline/{{ scan.id }}"
-                          hx-target="#scan-message"
+                          hx-target="#scan-list"
                           hx-swap="innerHTML"
                           class="inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% include "partials/_netcerber_scan_filters_hidden.html" %}
                         <button type="submit" class="text-gray-400 hover:text-yellow-500 text-xs"
                                 hx-confirm="Сделать этот снимок эталонным?">
                             <i class="far fa-star"></i>
@@ -51,10 +70,11 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                     <form hx-post="/netcerber/htmx/delete-scan/{{ scan.id }}"
-                          hx-target="#scan-message"
+                          hx-target="#scan-list"
                           hx-swap="innerHTML"
                           class="inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% include "partials/_netcerber_scan_filters_hidden.html" %}
                         <button type="submit" class="text-red-400 hover:text-red-600 text-sm"
                                 hx-confirm="Удалить запись сканирования?">
                             <i class="fas fa-trash-alt"></i>
@@ -65,7 +85,7 @@
             {% endfor %}
             {% if not scans %}
             <tr>
-                <td colspan="9" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colspan="10" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     <i class="fas fa-history text-2xl mb-2 block"></i>
                     Сканирований не найдено
                 </td>
@@ -74,3 +94,39 @@
         </tbody>
     </table>
 </div>
+
+{% if total > skip + limit %}
+<div class="p-3 text-center border-t border-gray-200 dark:border-gray-700">
+    <button hx-get="/netcerber/htmx/scans?skip=0&limit={{ limit + 50 }}"
+            hx-target="#scan-list"
+            hx-swap="innerHTML"
+            class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2 mx-auto">
+        <i class="fas fa-chevron-down"></i>
+        Показать ещё ({{ total - skip - limit }})
+    </button>
+</div>
+{% endif %}
+<script>
+(function () {
+    var list = document.getElementById('scan-list');
+    if (!list) return;
+    var boxes = list.querySelectorAll('.scan-check');
+    var all = list.querySelector('.scan-check-all');
+    var btn = document.getElementById('scan-delete-selected');
+    function sync() {
+        var n = 0;
+        boxes.forEach(function (b) { if (b.checked) n++; });
+        if (btn) {
+            btn.disabled = n === 0;
+            btn.innerHTML = '<i class="fas fa-trash-alt"></i> Удалить выбранные' + (n ? ' (' + n + ')' : '');
+        }
+        if (all) all.checked = n > 0 && n === boxes.length;
+    }
+    boxes.forEach(function (b) { b.addEventListener('change', sync); });
+    if (all) all.addEventListener('change', function () {
+        boxes.forEach(function (b) { b.checked = all.checked; });
+        sync();
+    });
+    sync();
+})();
+</script>

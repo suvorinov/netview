@@ -1,0 +1,7 @@
+{% include "partials/_netcerber_message.html" %}
+{% if scan_status is defined and scan_status %}
+<!-- Обновляем блок статуса после запуска сканирования (hx-swap-oob) -->
+<div id="scan-status" hx-swap-oob="true">
+    {% include "partials/_netcerber_scan_status.html" %}
+</div>
+{% endif %}

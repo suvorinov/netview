@@ -1,9 +1,18 @@
+{% if oob %}
+<span id="device-count" hx-swap-oob="true" class="text-sm text-gray-500">{{ total }} устройств</span>
+<div id="auth-tabs" hx-swap-oob="true">
+    {% include "partials/_netcerber_auth_tabs.html" %}
+</div>
+<div id="suspect-chips" hx-swap-oob="true" class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    {% include "partials/_netcerber_suspect_chips.html" %}
+</div>
+{% endif %}
 <div class="overflow-x-auto">
     <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>
                 <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
-                    hx-get="/netcerber/htmx/list?sort=ip&order={% if sort_by == 'ip' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+                    hx-get="/netcerber/htmx/list?sort=ip&order={% if sort_by == 'ip' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}{% if cat %}&cat={{ cat }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
                     hx-target="#device-list" hx-swap="innerHTML">
                     <div class="flex items-center gap-1">
                         IP
@@ -15,7 +24,7 @@
                     </div>
                 </th>
                 <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
-                    hx-get="/netcerber/htmx/list?sort=hostname&order={% if sort_by == 'hostname' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+                    hx-get="/netcerber/htmx/list?sort=hostname&order={% if sort_by == 'hostname' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}{% if cat %}&cat={{ cat }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
                     hx-target="#device-list" hx-swap="innerHTML">
                     <div class="flex items-center gap-1">
                         Hostname
@@ -28,7 +37,7 @@
                 </th>
                 <th class="px-4 py-3 text-left text-sm font-medium">MAC</th>
                 <th class="px-4 py-3 text-left text-sm font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 select-none"
-                    hx-get="/netcerber/htmx/list?sort=vendor&order={% if sort_by == 'vendor' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+                    hx-get="/netcerber/htmx/list?sort=vendor&order={% if sort_by == 'vendor' and order == 'asc' %}desc{% else %}asc{% endif %}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}{% if cat %}&cat={{ cat }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
                     hx-target="#device-list" hx-swap="innerHTML">
                     <div class="flex items-center gap-1">
                         Vendor
@@ -40,12 +49,13 @@
                     </div>
                 </th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Статус</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Признаки</th>
                 <th class="px-4 py-3 text-right text-sm font-medium">Действия</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             {% for device in devices %}
-            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {% if device._flags and (device._flags.router or device._flags.new) %}bg-yellow-50/50 dark:bg-yellow-900/10{% endif %}">
                 <td class="px-4 py-3">
                     <div class="flex items-center gap-2">
                         <i class="fas fa-network-wired text-gray-400"></i>
@@ -66,8 +76,38 @@
                     </span>
                     {% endif %}
                 </td>
+                <td class="px-4 py-3">
+                    {% if device._flags %}
+                    <div class="flex flex-wrap gap-1">
+                        {% if device._flags.router %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                              title="Вендор производит сетевое оборудование (роутер/точка доступа)">
+                            <i class="fas fa-wifi mr-1"></i> Сетевое оборудование?
+                        </span>
+                        {% endif %}
+                        {% if device._flags.new %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                              title="Впервые обнаружено за последние 7 дней">
+                            <i class="fas fa-plus-circle mr-1"></i> Новое
+                        </span>
+                        {% endif %}
+                        {% if device._flags.unknown %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                              title="Hostname не разрешился в DNS/AD">
+                            <i class="fas fa-question-circle mr-1"></i> Неизвестное
+                        </span>
+                        {% endif %}
+                        {% if device._flags.dhcp %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+                              title="IP выдан DHCP-пулом (зона несанкционированных подключений)">
+                            <i class="fas fa-plug mr-1"></i> В DHCP-пуле
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </td>
                 <td class="px-4 py-3 text-right">
-                    <button hx-get="/netcerber/htmx/device/{{ device.id }}"
+                    <button hx-get="/netcerber/htmx/device/{{ device.id }}?cat={{ cat }}&q={{ q }}&sort={{ sort_by }}&order={{ order }}&skip={{ skip }}&limit={{ limit }}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
                             hx-target="#device-modal-content"
                             hx-swap="innerHTML"
                             onclick="document.getElementById('device-modal').classList.remove('hidden')"
@@ -79,7 +119,7 @@
             {% endfor %}
             {% if not devices %}
             <tr>
-                <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     <i class="fas fa-search text-2xl mb-2 block"></i>
                     Устройства не найдены
                 </td>
@@ -89,14 +129,14 @@
     </table>
 </div>
 
-<!-- Device Detail Modal -->
-<div id="device-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-     onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
-        <div id="device-modal-content">
-            <div class="p-6 text-center text-gray-500">
-                <i class="fas fa-spinner fa-spin text-2xl"></i>
-            </div>
-        </div>
-    </div>
+{% if total > skip + limit and not cat and not q %}
+<div class="p-3 text-center border-t border-gray-200 dark:border-gray-700">
+    <button hx-get="/netcerber/htmx/list?skip=0&limit={{ limit + 100 }}&cat={{ cat }}&q={{ q }}&sort={{ sort_by }}&order={{ order }}{% if authorized %}&authorized=1{% endif %}{% if unauthorized %}&unauthorized=1{% endif %}"
+            hx-target="#device-list"
+            hx-swap="innerHTML"
+            class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2 mx-auto">
+        <i class="fas fa-chevron-down"></i>
+        Показать ещё ({{ total - skip - limit }})
+    </button>
 </div>
+{% endif %}

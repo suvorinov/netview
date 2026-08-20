@@ -59,14 +59,28 @@
 {% endif %}
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
-    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center gap-3">
         <span class="font-semibold">Журнал сканирований</span>
-        <span class="text-sm text-gray-500">Всего: {{ total }}</span>
+        <div class="flex items-center gap-3">
+            <span id="scan-total" class="text-sm text-gray-500">Всего: {{ total }}</span>
+            <form id="scan-batch-form"
+                  hx-post="/netcerber/htmx/delete-scans"
+                  hx-target="#scan-list"
+                  hx-swap="innerHTML"
+                  hx-confirm="Удалить выбранные записи?"
+                  class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="skip" value="{{ skip }}">
+                <input type="hidden" name="limit" value="{{ limit }}">
+                <button id="scan-delete-selected" type="submit" disabled
+                        class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+                    <i class="fas fa-trash-alt"></i> Удалить выбранные
+                </button>
+            </form>
+        </div>
     </div>
     <div id="scan-list">
-        {% with scans=scans, total=total %}
         {% include "partials/_netcerber_scans.html" %}
-        {% endwith %}
     </div>
 </div>
 {% endblock %}

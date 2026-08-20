@@ -12,7 +12,9 @@ from flask import Blueprint, current_app, render_template
 
 from app.api.host_client import HostMonitorClient
 from app.api.logspy_client import LogSpyClient
+from app.api.netcerber_client import NetCerberClient
 from app.api.printer_client import PrinterMonitorClient
+from app.utils import is_new_device, is_router_vendor, is_unknown_device
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -105,6 +107,7 @@ def index() -> str:
     printer_client = _get_printer_client()
     host_client = _get_host_client()
     logspy_client = _get_logspy_client()
+    netcerber_client = NetCerberClient(current_app.config["NETCERBER_API_URL"])
 
     # Независимые запросы выполняем параллельно, чтобы страница не ждала
     # каждый сервис по очереди (при недоступном сервисе — до 20 секунд).
@@ -119,6 +122,14 @@ def index() -> str:
         "ad_stats": (logspy_client.get_ad_stats, {}, "LogSpy"),
         "logs": (logspy_client.get_logs, [], "LogSpy"),
         "stoplist": (logspy_client.get_stoplist, {}, "LogSpy"),
+        "netcerber_devices": (
+            lambda: netcerber_client.get_devices(limit=500),
+            {}, "NetCerber",
+        ),
+        "netcerber_alerts": (
+            lambda: netcerber_client.get_alerts(limit=1),
+            {}, "NetCerber",
+        ),
     }
 
     results: dict[str, Any] = {}
@@ -174,6 +185,22 @@ def index() -> str:
 
     stoplist_count = results["stoplist"].get("total", 0)
 
+    # NetCerber: счётчики подозрительных устройств и топ новых.
+    nc_devices = results["netcerber_devices"].get("items", [])
+    nc_router = 0
+    nc_unknown = 0
+    nc_new: list[dict[str, Any]] = []
+    for d in nc_devices:
+        unknown = is_unknown_device(d)
+        if is_router_vendor(d.get("vendor", ""), unknown):
+            nc_router += 1
+        if unknown:
+            nc_unknown += 1
+        if is_new_device(d):
+            nc_new.append(d)
+    nc_new.sort(key=lambda d: d.get("first_seen") or "", reverse=True)
+    nc_alerts_total = results["netcerber_alerts"].get("total", 0)
+
     return render_template(
         "dashboard.html",
         printer_count=printer_count,
@@ -193,5 +220,10 @@ def index() -> str:
         total_requests=total_requests,
         unique_users=unique_users,
         stoplist_count=stoplist_count,
+        nc_router=nc_router,
+        nc_unknown=nc_unknown,
+        nc_new_count=len(nc_new),
+        nc_new_top=nc_new[:5],
+        nc_alerts_total=nc_alerts_total,
         unavailable_services=sorted(unavailable),
     )
