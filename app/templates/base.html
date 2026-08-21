@@ -6,6 +6,15 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}NetView{% endblock %}</title>
 
+    <!-- Применить сохранённую тему до отрисовки страницы (иначе мигание) -->
+    <script>
+        try {
+            if (localStorage.getItem('netview-theme') === 'light') {
+                document.documentElement.classList.remove('dark');
+            }
+        } catch (e) { /* приватный режим — остаётся тёмная по умолчанию */ }
+    </script>
+
     <!-- Локальные статики (не зависят от интернета) -->
     <script src="{{ url_for('static', filename='vendor/tailwind.js') }}"></script>
     <script>
@@ -114,7 +123,8 @@
                        class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
                         <i class="fas fa-sign-out-alt"></i>
                     </a>
-                    <button onclick="document.documentElement.classList.toggle('dark')" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700">
+                    <button onclick="toggleTheme()" title="Светлая/тёмная тема"
+                            class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700">
                         <i class="fas fa-moon dark:hidden"></i>
                         <i class="fas fa-sun hidden dark:inline"></i>
                     </button>
@@ -125,5 +135,30 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+    <!-- Кнопка «наверх»: видна после прокрутки страницы вниз -->
+    <button id="scroll-top" title="Наверх"
+            onclick="window.scrollTo({top: 0, behavior: 'smooth'})"
+            class="hidden fixed bottom-6 right-6 z-50 p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+    <script>
+        const scrollTopBtn = document.getElementById('scroll-top');
+        window.addEventListener('scroll', () => {
+            scrollTopBtn.classList.toggle('hidden', window.scrollY < 300);
+        }, {passive: true});
+
+        // Переключить тему и запомнить выбор между страницами и сессиями
+        function toggleTheme() {
+            const root = document.documentElement;
+            root.classList.toggle('dark');
+            try {
+                localStorage.setItem(
+                    'netview-theme',
+                    root.classList.contains('dark') ? 'dark' : 'light'
+                );
+            } catch (e) { /* приватный режим */ }
+        }
+    </script>
 </body>
 </html>

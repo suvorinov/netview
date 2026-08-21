@@ -5,9 +5,11 @@
 """
 
 import logging
+import re
 
 from flask import Blueprint, Response, current_app, render_template, request
 
+from app.api.logspy_client import LogSpyClient
 from app.api.netcerber_client import NetCerberClient
 from app.utils import (
     is_in_dhcp_pool,
@@ -57,6 +59,45 @@ def _as_bool(value: str | None) -> bool | None:
 
 def _get_client() -> NetCerberClient:
     return NetCerberClient(current_app.config["NETCERBER_API_URL"])
+
+
+def _get_logspy_client() -> LogSpyClient:
+    return LogSpyClient(current_app.config["LOGSPY_API_URL"])
+
+
+def _resolve_ad(ip_address: str | None) -> dict | None:
+    """Сопоставить IP с компьютером/пользователем AD (через LogSpy).
+
+    Returns:
+        {"username", "computer_name", "source"} или None, если
+        сопоставление не найдено или сервис недоступен.
+    """
+    if not ip_address:
+        return None
+    try:
+        return _get_logspy_client().ad_resolve_ip(ip_address)
+    except Exception as e:
+        logger.info("LogSpy AD resolve (%s): %s", ip_address, e)
+        return None
+
+
+def _scheduler_status() -> dict:
+    """Статус планировщика автосканирований NetCerber.
+
+    Добавляет interval_hours — интервал из trigger-строки
+    "interval[5:00:00]" в часах (для поля формы).
+    """
+    try:
+        status = _get_client().scheduler_status()
+    except Exception as e:
+        logger.error("NetCerber API (scheduler status) error: %s", e)
+        return {}
+    trigger = (status.get("job") or {}).get("trigger") or ""
+    m = re.fullmatch(r"interval\[(\d+):(\d+):(\d+)\]", trigger)
+    if m:
+        h, mi, s = (int(x) for x in m.groups())
+        status["interval_hours"] = round(h + mi / 60 + s / 3600, 2)
+    return status
 
 
 def _device_flags(device: dict, pool: tuple[str, str] | None = None) -> dict[str, bool]:
@@ -231,6 +272,7 @@ def htmx_device_detail(device_id: int):
     return render_template(
         "partials/_netcerber_device_detail.html",
         device=device,
+        ad_info=_resolve_ad(device.get("ip_address")),
         **_list_filters(request.args),
     )
 
@@ -278,6 +320,7 @@ def _device_detail_response(device: dict, filters: dict) -> str:
     return render_template(
         "partials/_netcerber_device_detail.html",
         device=device,
+        ad_info=_resolve_ad(device.get("ip_address")),
         oob=True,
         devices=devices,
         total=total,
@@ -501,6 +544,67 @@ def htmx_scan_status():
         last_scan=last_scan,
         oob=True,
     )
+
+
+@netcerber_bp.route("/htmx/scheduler")
+def htmx_scheduler():
+    """HTMX: блок управления планировщиком автосканирований."""
+    return render_template(
+        "partials/_netcerber_scheduler.html",
+        scheduler=_scheduler_status(),
+    )
+
+
+@netcerber_bp.route("/htmx/scheduler/toggle", methods=["POST"])
+def htmx_scheduler_toggle():
+    """HTMX: пауза/возобновление автосканирований."""
+    running = _scheduler_status().get("running", False)
+    client = _get_client()
+    try:
+        if running:
+            client.scheduler_pause()
+            flash = "Автосканирование поставлено на паузу"
+        else:
+            client.scheduler_resume()
+            flash = "Автосканирование возобновлено"
+        return render_template(
+            "partials/_netcerber_scheduler.html",
+            scheduler=_scheduler_status(),
+            message=(True, flash),
+        )
+    except Exception as e:
+        logger.error("NetCerber API (scheduler toggle) error: %s", e)
+        return render_template(
+            "partials/_netcerber_scheduler.html",
+            scheduler=_scheduler_status(),
+            message=(False, str(e)),
+        )
+
+
+@netcerber_bp.route("/htmx/scheduler/interval", methods=["POST"])
+def htmx_scheduler_interval():
+    """HTMX: изменить интервал автосканирований (в часах)."""
+    hours = request.form.get("interval_hours", type=float)
+    if not hours or hours <= 0 or hours > 168:
+        return render_template(
+            "partials/_netcerber_scheduler.html",
+            scheduler=_scheduler_status(),
+            message=(False, "Интервал: от 0.5 до 168 часов"),
+        )
+    try:
+        _get_client().scheduler_set_interval(int(hours * 3600))
+        return render_template(
+            "partials/_netcerber_scheduler.html",
+            scheduler=_scheduler_status(),
+            message=(True, f"Интервал автосканирования: {hours:g} ч"),
+        )
+    except Exception as e:
+        logger.error("NetCerber API (scheduler interval) error: %s", e)
+        return render_template(
+            "partials/_netcerber_scheduler.html",
+            scheduler=_scheduler_status(),
+            message=(False, str(e)),
+        )
 
 
 @netcerber_bp.route("/htmx/set-baseline/<int:scan_id>", methods=["POST"])

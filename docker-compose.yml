@@ -2,6 +2,12 @@ services:
   netview:
     build: .
     container_name: netview
+    # Все переменные (SECRET_KEY, AUTH_USERS, DHCP_POOL, URL сервисов...)
+    # берутся из .env рядом с compose-файлом. Шаблон: .env.example
+    env_file: .env
+    # Доступ к сервисам на хост-машине по http://host.docker.internal:810X
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "5000:5000"
     restart: unless-stopped

@@ -7,7 +7,11 @@
 {% include "partials/_service_alert.html" %}
 <!-- Статистика -->
 <div class="mb-6">
-    <div id="hosts-stats">
+    <div id="hosts-stats"
+         hx-get="/hosts/stats"
+         hx-trigger="every 30s"
+         hx-target="#hosts-stats"
+         hx-swap="innerHTML">
         {% include "partials/_host_stats.html" %}
     </div>
 </div>

@@ -1,5 +1,8 @@
 <!-- Список принтеров для HTMX -->
-<div class="overflow-x-auto">
+<div class="overflow-x-auto"
+     hx-get="/printers/htmx/list?sort={{ sort_by or '' }}&order={{ order or 'asc' }}"
+     hx-trigger="every 60s"
+     hx-swap="outerHTML">
     <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>

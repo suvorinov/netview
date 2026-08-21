@@ -5,6 +5,62 @@
 
 {% block content %}
 {% include "partials/_service_alert.html" %}
+<!-- Вкладки: Пользователи / Компьютеры -->
+<div class="mb-4 flex gap-2">
+    <a href="/users/"
+       class="px-4 py-2 rounded-lg text-sm flex items-center gap-2 {% if view != 'computers' %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}">
+        <i class="fas fa-users"></i> Пользователи
+    </a>
+    <a href="/users/?view=computers"
+       class="px-4 py-2 rounded-lg text-sm flex items-center gap-2 {% if view == 'computers' %}bg-blue-600 text-white{% else %}bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600{% endif %}">
+        <i class="fas fa-desktop"></i> Компьютеры
+    </a>
+</div>
+
+{% if view == 'computers' %}
+<!-- Таблица компьютеров -->
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="font-semibold">
+            <i class="fas fa-desktop text-blue-500 mr-2"></i>
+            Компьютеры AD <span class="text-gray-500 text-sm">({{ computers|length }})</span>
+        </h3>
+    </div>
+    {% if computers %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                    <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Имя</th>
+                    <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">DNS</th>
+                    <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">ОС</th>
+                    <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">IP</th>
+                    <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">OU</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for c in computers %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td class="px-4 py-3 font-medium">{{ c.name }}</td>
+                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ c.dNSHostName or '—' }}</td>
+                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ c.operatingSystem or '—' }}</td>
+                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono text-xs">
+                        {{ c.ip_addresses|join(', ') if c.ip_addresses else '—' }}
+                    </td>
+                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{{ c.ou or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="p-8 text-center text-gray-500">
+        <i class="fas fa-desktop text-4xl mb-3 text-gray-300"></i>
+        <p>Компьютеры не найдены</p>
+    </div>
+    {% endif %}
+</div>
+{% else %}
 <!-- Фильтры -->
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
     <form method="GET" class="flex flex-wrap gap-3 items-end">
@@ -101,4 +157,5 @@
     </div>
     {% endif %}
 </div>
+{% endif %}
 {% endblock %}

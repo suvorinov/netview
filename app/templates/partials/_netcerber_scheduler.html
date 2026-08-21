@@ -1,0 +1,60 @@
+<div class="mb-4 px-4 py-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span class="text-sm font-medium flex items-center gap-2">
+            <i class="fas fa-clock text-blue-500"></i> Автосканирование:
+        </span>
+        {% if scheduler %}
+        {% if scheduler.running %}
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+            <i class="fas fa-play mr-1"></i>Активно
+        </span>
+        {% else %}
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+            <i class="fas fa-pause mr-1"></i>На паузе
+        </span>
+        {% endif %}
+        {% if scheduler.job and scheduler.job.next_run_time %}
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+            Следующий запуск: {{ scheduler.job.next_run_time|datetime }}
+        </span>
+        {% endif %}
+        <form hx-post="/netcerber/htmx/scheduler/interval"
+              hx-target="#scheduler-block"
+              hx-swap="innerHTML"
+              class="flex items-center gap-2 ml-auto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="interval_hours" class="text-xs text-gray-500 dark:text-gray-400">Интервал, ч:</label>
+            <input id="interval_hours" name="interval_hours" type="number" min="0.5" max="168" step="0.5"
+                   value="{{ scheduler.interval_hours or 5 }}"
+                   class="w-20 px-2 py-1 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700">
+            <button type="submit" title="Сохранить интервал"
+                    class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <i class="fas fa-save"></i>
+            </button>
+        </form>
+        <form hx-post="/netcerber/htmx/scheduler/toggle"
+              hx-target="#scheduler-block"
+              hx-swap="innerHTML">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if scheduler.running %}
+            <button type="submit" title="Остановить автосканирования"
+                    class="px-3 py-1 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
+                <i class="fas fa-pause"></i> Пауза
+            </button>
+            {% else %}
+            <button type="submit" title="Возобновить автосканирования"
+                    class="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700">
+                <i class="fas fa-play"></i> Возобновить
+            </button>
+            {% endif %}
+        </form>
+        {% else %}
+        <span class="text-sm text-gray-400">Статус недоступен</span>
+        {% endif %}
+    </div>
+    {% if message %}
+    <div class="mt-2 text-sm {% if message[0] %}text-green-600 dark:text-green-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+        {{ message[1] }}
+    </div>
+    {% endif %}
+</div>

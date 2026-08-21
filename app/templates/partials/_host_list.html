@@ -1,5 +1,8 @@
 <!-- Список хостов для HTMX -->
-<div class="overflow-x-auto">
+<div class="overflow-x-auto"
+     hx-get="/hosts/htmx/list?sort={{ sort_by or '' }}&order={{ order or 'asc' }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+     hx-trigger="every 60s"
+     hx-swap="outerHTML">
     <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>

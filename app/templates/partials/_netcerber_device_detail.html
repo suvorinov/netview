@@ -19,6 +19,19 @@
             <span class="text-gray-500">Vendor</span>
             <span>{{ device.vendor }}</span>
         </div>
+        {% if ad_info %}
+        <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+            <span class="text-gray-500">В AD</span>
+            <span>
+                {% if ad_info.username %}
+                <i class="fas fa-user text-blue-500 mr-1" title="Пользователь AD"></i>{{ ad_info.username }}
+                {% endif %}
+                {% if ad_info.computer_name %}
+                <i class="fas fa-desktop text-blue-500 {% if ad_info.username %}ml-2{% else %}mr-1{% endif %}" title="Компьютер AD"></i>{{ ad_info.computer_name }}
+                {% endif %}
+            </span>
+        </div>
+        {% endif %}
         <div class="flex justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
             <span class="text-gray-500">Описание</span>
             <span>{{ device.description or '—' }}</span>

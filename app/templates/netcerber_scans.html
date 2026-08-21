@@ -51,6 +51,13 @@
      hx-swap="innerHTML">
 </div>
 
+<!-- Планировщик автосканирований -->
+<div id="scheduler-block"
+     hx-get="/netcerber/htmx/scheduler"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+</div>
+
 {% if baseline %}
 <div class="mb-4 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-700 flex items-center gap-2">
     <i class="fas fa-star text-yellow-500"></i>

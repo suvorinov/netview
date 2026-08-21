@@ -97,6 +97,28 @@ def mock_api_clients(monkeypatch):
         NetCerberClient, "export_devices",
         lambda self, fmt="csv": "MAC,IP\n00:11:22:33:44:55,192.168.0.201\n",
     )
+    monkeypatch.setattr(LogSpyClient, "ad_resolve_ip", lambda self, ip: None)
+    monkeypatch.setattr(LogSpyClient, "get_ad_computers", lambda self, **kwargs: [])
+    monkeypatch.setattr(LogSpyClient, "get_health", lambda self: {"status": "ok"})
+    monkeypatch.setattr(
+        NetCerberClient, "get_health",
+        lambda self: {"status": "healthy", "database": "ok", "scanner": "ready"},
+    )
+    monkeypatch.setattr(
+        NetCerberClient, "scheduler_status",
+        lambda self: {
+            "running": True,
+            "job": {
+                "next_run_time": "2026-08-21T11:53:37+03:00",
+                "trigger": "interval[5:00:00]",
+            },
+        },
+    )
+    monkeypatch.setattr(NetCerberClient, "scheduler_pause", lambda self: {})
+    monkeypatch.setattr(NetCerberClient, "scheduler_resume", lambda self: {})
+    monkeypatch.setattr(
+        NetCerberClient, "scheduler_set_interval", lambda self, interval: {},
+    )
 
 
 PAGES = [
@@ -122,6 +144,7 @@ HTMX_FRAGMENTS = [
     "/netcerber/htmx/stats",
     "/netcerber/htmx/scan-status",
     "/netcerber/htmx/device/1",
+    "/netcerber/htmx/scheduler",
 ]
 
 
@@ -585,3 +608,128 @@ def test_scan_delete_keeps_position(logged_client, monkeypatch):
     assert "Запись #42 удалена" in html
     assert 'name="skip" value="50"' in html
     assert 'name="limit" value="50"' in html
+
+
+# ── IP → AD в модалке устройства ──────────────────────────────
+
+
+def test_netcerber_device_shows_ad_info(logged_client, monkeypatch):
+    """В модалке устройства виден AD-компьютер за этим IP."""
+    monkeypatch.setattr(
+        NetCerberClient, "get_device",
+        lambda self, device_id: {"id": device_id, "ip_address": "192.168.0.100"},
+    )
+    monkeypatch.setattr(
+        LogSpyClient, "ad_resolve_ip",
+        lambda self, ip: {
+            "ip_address": ip,
+            "username": "",
+            "computer_name": "ZR-19",
+            "source": "ad_computer",
+        },
+    )
+    html = logged_client.get("/netcerber/htmx/device/1").get_data(as_text=True)
+    assert "В AD" in html
+    assert "ZR-19" in html
+
+
+def test_netcerber_device_without_ad_info(logged_client):
+    """Если сопоставление не найдено — строки «В AD» нет, модалка работает."""
+    html = logged_client.get("/netcerber/htmx/device/1").get_data(as_text=True)
+    assert "В AD" not in html
+    assert "MAC" in html
+
+
+# ── Планировщик автосканирований ──────────────────────────────
+
+
+def test_netcerber_scheduler_block_active(logged_client):
+    """Блок планировщика показывает статус и интервал из trigger-строки."""
+    html = logged_client.get("/netcerber/htmx/scheduler").get_data(as_text=True)
+    assert "Активно" in html
+    assert 'name="interval_hours"' in html
+    assert 'value="5.0"' in html
+
+
+def test_netcerber_scheduler_toggle_pauses(logged_client, monkeypatch):
+    paused = []
+    monkeypatch.setattr(
+        NetCerberClient, "scheduler_pause",
+        lambda self: paused.append(True) or {},
+    )
+    html = logged_client.post(
+        "/netcerber/htmx/scheduler/toggle",
+        data={"csrf_token": _csrf_token(logged_client)},
+    ).get_data(as_text=True)
+    assert paused == [True]
+    assert "паузу" in html
+
+
+def test_netcerber_scheduler_interval_validation(logged_client, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        NetCerberClient, "scheduler_set_interval",
+        lambda self, interval: called.append(interval),
+    )
+    token = _csrf_token(logged_client)
+    html = logged_client.post(
+        "/netcerber/htmx/scheduler/interval",
+        data={"interval_hours": "999", "csrf_token": token},
+    ).get_data(as_text=True)
+    assert "от 0.5 до 168" in html
+    assert not called
+
+    logged_client.post(
+        "/netcerber/htmx/scheduler/interval",
+        data={"interval_hours": "8", "csrf_token": token},
+    )
+    assert called == [28800]
+
+
+# ── Здоровье сервисов в Настройках ────────────────────────────
+
+
+def test_settings_shows_services_health(logged_client):
+    html = logged_client.get("/settings/").get_data(as_text=True)
+    assert "Сервисы" in html
+    for name in ("Printer Monitor", "Host Monitor", "LogSpy", "NetCerber"):
+        assert name in html
+    assert ">OK</span>" in html
+
+
+def test_settings_marks_unavailable_service(logged_client, monkeypatch):
+    def boom(self):
+        raise ConnectionError("down")
+
+    monkeypatch.setattr(HostMonitorClient, "get_stats", boom)
+    html = logged_client.get("/settings/").get_data(as_text=True)
+    assert "Недоступен" in html
+
+
+# ── Вкладка «Компьютеры» на Users ─────────────────────────────
+
+
+def test_users_computers_tab(logged_client, monkeypatch):
+    monkeypatch.setattr(
+        LogSpyClient, "get_ad_computers",
+        lambda self, **kwargs: [
+            {
+                "name": "ZR-19",
+                "dNSHostName": "zr-19.zr.local",
+                "operatingSystem": "Windows 10 Pro",
+                "ip_addresses": ["192.168.0.100"],
+                "ou": "ZR",
+            },
+        ],
+    )
+    html = logged_client.get("/users/?view=computers").get_data(as_text=True)
+    assert "Компьютеры AD" in html
+    assert "ZR-19" in html
+    assert "192.168.0.100" in html
+    # Таблица пользователей не рендерится
+    assert "Пользователи не найдены" not in html
+
+
+def test_users_tab_switch_links(logged_client):
+    html = logged_client.get("/users/").get_data(as_text=True)
+    assert '/users/?view=computers' in html

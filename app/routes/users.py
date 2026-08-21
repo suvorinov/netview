@@ -51,8 +51,25 @@ def index():
     search = request.args.get("search", "").strip()
     ou_filter = request.args.get("ou", "").strip()
     dept_filter = request.args.get("department", "").strip()
+    view = request.args.get("view", "users")
 
     unavailable_services = []
+
+    # Вкладка «Компьютеры»: список рабочих станций и серверов AD.
+    if view == "computers":
+        try:
+            computers = client.get_ad_computers()
+        except Exception as e:
+            computers = []
+            logger.error("LogSpy API (ad computers) error: %s", e)
+            unavailable_services.append("LogSpy")
+        return render_template(
+            "users.html",
+            view="computers",
+            computers=computers,
+            unavailable_services=unavailable_services,
+        )
+
     try:
         users = client.get_ad_users(
             search=search or None,
@@ -74,6 +91,7 @@ def index():
 
     return render_template(
         "users.html",
+        view="users",
         users=users,
         ous=ous,
         search=search,

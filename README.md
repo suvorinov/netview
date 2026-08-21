@@ -97,19 +97,31 @@ make up
 | --- | --- | --- |
 | `SECRET_KEY` | Ключ подписи сессий. Если не задан — генерируется случайный, сессии сбрасываются при перезапуске | — |
 | `AUTH_USERS` | Учётные записи для входа: `user:pass,user2:pass2`. Пароль можно хранить pbkdf2-хешем werkzeug | — (вход недоступен) |
+| `DHCP_POOL` | Диапазон DHCP-пула `начало,конец` — признак «В DHCP-пуле» в NetCerber | — (признак выключен) |
 | `PRINTER_API_URL` | URL Printer Monitor API | `http://localhost:8101` |
 | `HOST_API_URL` | URL Host Monitor API | `http://localhost:8102` |
 | `LOGSPY_API_URL` | URL LogSpy API | `http://localhost:8103` |
 | `NETCERBER_API_URL` | URL NetCerber API | `http://localhost:8104` |
-| `AD_DOMAIN` | Домен AD для фильтров логов | `AD.LOCAL` |
+| `AD_DOMAIN` | Домен AD для фильтров логов | — |
 | `DEBUG` | Режим отладки (`1`/`true`/`0`) | `false` |
 
 Пример:
 
 ```bash
-export SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-export AUTH_USERS="admin:my-secret-password"
+cp .env.example .env
+# отредактируйте .env: SECRET_KEY, AUTH_USERS, DHCP_POOL, адреса сервисов
 ```
+
+`.env` исключён из git и Docker-образа; в репозитории лежит только шаблон `.env.example`.
+
+### Запуск в Docker
+
+```bash
+cp .env.example .env   # заполнить реальные значения
+make build && make up
+```
+
+Compose читает переменные из `.env` (`env_file`). Внутри контейнера `localhost` — сам контейнер, поэтому сервисы на хост-машине доступны по `host.docker.internal` (в compose добавлен `extra_hosts: host-gateway`).
 
 ## Безопасность
 

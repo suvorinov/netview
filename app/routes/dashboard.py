@@ -130,6 +130,10 @@ def index() -> str:
             lambda: netcerber_client.get_alerts(limit=1),
             {}, "NetCerber",
         ),
+        "netcerber_stats": (
+            netcerber_client.get_stats,
+            {}, "NetCerber",
+        ),
     }
 
     results: dict[str, Any] = {}
@@ -200,6 +204,9 @@ def index() -> str:
             nc_new.append(d)
     nc_new.sort(key=lambda d: d.get("first_seen") or "", reverse=True)
     nc_alerts_total = results["netcerber_alerts"].get("total", 0)
+    nc_stats = results["netcerber_stats"]
+    nc_total_devices = nc_stats.get("total_devices", 0)
+    nc_authorized = nc_stats.get("authorized_count", 0)
 
     return render_template(
         "dashboard.html",
@@ -225,5 +232,7 @@ def index() -> str:
         nc_new_count=len(nc_new),
         nc_new_top=nc_new[:5],
         nc_alerts_total=nc_alerts_total,
+        nc_total_devices=nc_total_devices,
+        nc_authorized=nc_authorized,
         unavailable_services=sorted(unavailable),
     )

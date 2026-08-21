@@ -1,0 +1,22 @@
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+    <h3 class="text-lg font-semibold flex items-center gap-2 mb-4">
+        <i class="fas fa-heartbeat text-red-500"></i>
+        Сервисы
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {% for s in services %}
+        <div class="rounded-lg p-4 border {% if s.ok %}border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20{% else %}border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20{% endif %}">
+            <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-sm">{{ s.name }}</span>
+                {% if s.ok %}
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">OK</span>
+                {% else %}
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">Недоступен</span>
+                {% endif %}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 truncate" title="{{ s.url }}">{{ s.url }}</div>
+            <div class="text-xs mt-1 {% if s.ok %}text-gray-600 dark:text-gray-300{% else %}text-red-600 dark:text-red-400{% endif %}">{{ s.summary }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
