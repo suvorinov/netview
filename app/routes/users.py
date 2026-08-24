@@ -6,7 +6,10 @@
 
 import logging
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from typing import Any
 
 from flask import (
     Blueprint,
@@ -23,6 +26,34 @@ from app.utils import format_duration, human_size
 users_bp = Blueprint("users", __name__)
 
 logger = logging.getLogger(__name__)
+
+
+def _run_parallel(tasks: dict[str, Callable[[], Any]]) -> dict[str, Any]:
+    """Выполнить независимые запросы к сервису параллельно.
+
+    Страница пользователя делает до четырёх запросов к LogSpy;
+    последовательно на медленном сервисе это 1–3 секунды ожидания.
+    Параллельный запуск сокращает время страницы до одного таймаута.
+
+    Args:
+        tasks: {имя задачи: функция запроса}. Имя попадает в лог.
+
+    Returns:
+        {имя задачи: результат}; при сетевой ошибке результат None
+        (ошибка залогирована). Не-сетевые исключения не глушатся:
+        ошибка формы данных — наш баг и должен падать громко.
+    """
+    results: dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as pool:
+        futures = {pool.submit(fn): name for name, fn in tasks.items()}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                results[name] = future.result()
+            except RequestException as e:
+                logger.error("LogSpy API (%s) error: %s", name, e)
+                results[name] = None
+    return results
 
 
 def _get_user_upn(user: dict) -> str:
@@ -57,7 +88,9 @@ def index():
     dept_filter = request.args.get("department", "").strip()
     view = request.args.get("view", "users")
 
-    unavailable_services = []
+    # Множество: несколько упавших запросов к одному сервису не должны
+    # дублировать баннер недоступности.
+    unavailable_services: set[str] = set()
 
     # Вкладка «Компьютеры»: список рабочих станций и серверов AD.
     if view == "computers":
@@ -66,7 +99,7 @@ def index():
         except RequestException as e:
             computers = []
             logger.error("LogSpy API (ad computers) error: %s", e)
-            unavailable_services.append("LogSpy")
+            unavailable_services.add("LogSpy")
         return render_template(
             "users.html",
             view="computers",
@@ -84,14 +117,14 @@ def index():
     except RequestException as e:
         users = []
         logger.error("LogSpy API (ad users) error: %s", e)
-        unavailable_services.append("LogSpy")
+        unavailable_services.add("LogSpy")
 
     try:
         ous = client.get_ad_ous()
     except RequestException as e:
         ous = []
         logger.error("LogSpy API (ad ous) error: %s", e)
-        unavailable_services.append("LogSpy")
+        unavailable_services.add("LogSpy")
 
     return render_template(
         "users.html",
@@ -108,20 +141,20 @@ def index():
 @users_bp.route("/<username>")
 def detail(username: str):
     client = get_logspy_client()
-    unavailable_services = []
+    unavailable_services: set[str] = set()
 
-    try:
-        user = client.get_ad_user(username)
-    except RequestException as e:
-        logger.error("LogSpy API (ad user=%s) error: %s", username, e)
+    # Профиль и текущий лог-файл независимы — параллельно.
+    first = _run_parallel({
+        "ad_user": lambda: client.get_ad_user(username),
+        "logs_list": client.get_current_log,
+    })
+    user = first["ad_user"]
+    if user is None:
+        # LogSpy не отдал профиль (в т.ч. 404) — страницы пользователя нет.
         return render_template("errors/404.html", message="Пользователь не найден"), 404
-
-    try:
-        current_log = client.get_current_log()
-    except RequestException as e:
-        current_log = ""
-        logger.error("LogSpy API (logs list) error: %s", e)
-        unavailable_services.append("LogSpy")
+    if first["logs_list"] is None:
+        unavailable_services.add("LogSpy")
+    current_log = first["logs_list"] or ""
 
     user_upn = _get_user_upn(user)
 
@@ -131,33 +164,31 @@ def detail(username: str):
     all_data: dict = {}
 
     if current_log:
-        try:
-            all_data = client.get_data(
+        # Записи за выборку и серверная статистика независимы — параллельно.
+        second = _run_parallel({
+            "user_records": lambda: client.get_data(
                 current_log, user=user_upn, limit=500
-            )
-        except RequestException as e:
-            logger.error("LogSpy API (user records=%s) error: %s", username, e)
-            unavailable_services.append("LogSpy")
-        else:
-            # Разбор ответа вне try: ошибка формы данных — наш баг,
-            # а не «сервис недоступен».
-            raw_records = all_data.get("records", [])
-            all_records = [
-                r for r in raw_records
-                if r.get("user") and r["user"] != "-"
-            ]
-            blocked_records = [
-                r for r in all_records if r.get("is_blocked")
-            ]
+            ),
+            "user_activity": lambda: client.get_ad_user_activity(
+                user_upn, current_log
+            ),
+        })
+        if any(result is None for result in second.values()):
+            unavailable_services.add("LogSpy")
 
-        # Точная статистика за весь файл — серверная агрегация LogSpy.
-        server_stats = None
-        try:
-            server_stats = client.get_ad_user_activity(user_upn, current_log)
-        except RequestException as e:
-            logger.error("LogSpy API (user activity=%s) error: %s", username, e)
-            unavailable_services.append("LogSpy")
+        all_data = second["user_records"] or {}
+        # Разбор ответа вне try: ошибка формы данных — наш баг,
+        # а не «сервис недоступен».
+        raw_records = all_data.get("records", [])
+        all_records = [
+            r for r in raw_records
+            if r.get("user") and r["user"] != "-"
+        ]
+        blocked_records = [
+            r for r in all_records if r.get("is_blocked")
+        ]
 
+        server_stats = second["user_activity"]
         if server_stats:
             activity = {
                 "username": username,
@@ -264,7 +295,7 @@ def api_user_activity(username: str):
         return jsonify(data)
     except RequestException as e:
         logger.error("LogSpy API (user activity=%s) error: %s", username, e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "LogSpy недоступен"}), 500
 
 
 @users_bp.route("/<username>/export/blocked")

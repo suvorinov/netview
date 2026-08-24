@@ -15,21 +15,9 @@
         } catch (e) { /* приватный режим — остаётся тёмная по умолчанию */ }
     </script>
 
-    <!-- Локальные статики (не зависят от интернета) -->
-    <script src="{{ url_for('static', filename='vendor/tailwind.js') }}"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        sidebar: '#1e293b',
-                        sidebarHover: '#334155',
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Скомпилированный Tailwind (make css). Play CDN-сборка убрана:
+         минус ~400 KB JS и компиляция CSS в браузере на каждый чих -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 
     <!-- HTMX -->
     <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}"></script>
@@ -119,10 +107,16 @@
                     <span class="text-sm text-gray-500 dark:text-gray-400">
                         <i class="fas fa-user mr-1"></i>{{ current_user.id }}
                     </span>
-                    <a href="{{ url_for('auth.logout') }}" title="Выйти"
-                       class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </a>
+                    <!-- Выход только POST+CSRF: GET-ссылку можно было
+                         дёрнуть чужой картинкой (logout CSRF) -->
+                    <form method="post" action="{{ url_for('auth.logout') }}"
+                          class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" title="Выйти"
+                                class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </form>
                     <button onclick="toggleTheme()" title="Светлая/тёмная тема"
                             class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700">
                         <i class="fas fa-moon dark:hidden"></i>

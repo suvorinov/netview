@@ -72,6 +72,7 @@ def htmx_hosts_list() -> str:
         HTML-фрагмент со списком хостов.
     """
     client = _get_client()
+    unavailable_services: list[str] = []
     status_filter = request.args.get("status", None)
     sort_by = request.args.get("sort", "")
     order = request.args.get("order", "asc")
@@ -82,6 +83,9 @@ def htmx_hosts_list() -> str:
     except RequestException as e:
         hosts = []
         logger.error("Host Monitor API error: %s", e)
+        # Фрагмент заменяет таблицу целиком — без баннера пользователь
+        # увидел бы «пусто» вместо «сервис недоступен».
+        unavailable_services = ["Host Monitor"]
 
     hosts = sort_items(hosts, sort_by, order, SORT_FIELDS)
 
@@ -90,7 +94,8 @@ def htmx_hosts_list() -> str:
         hosts=hosts,
         status_filter=status_filter,
         sort_by=sort_by,
-        order=order
+        order=order,
+        unavailable_services=unavailable_services,
     )
 
 
@@ -102,13 +107,19 @@ def hosts_stats() -> str:
         HTML-фрагмент со статистикой.
     """
     client = _get_client()
+    unavailable_services: list[str] = []
     try:
         stats = client.get_stats()
     except RequestException as e:
         stats = {"total": 0, "online": 0, "offline": 0}
         logger.error("Host Monitor API error: %s", e)
+        unavailable_services = ["Host Monitor"]
 
-    return render_template("partials/_host_stats.html", stats=stats)
+    return render_template(
+        "partials/_host_stats.html",
+        stats=stats,
+        unavailable_services=unavailable_services,
+    )
 
 
 @hosts_bp.route("/htmx/host/<hostname>")

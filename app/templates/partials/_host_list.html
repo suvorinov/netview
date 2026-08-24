@@ -3,6 +3,9 @@
      hx-get="/hosts/htmx/list?sort={{ sort_by or '' }}&order={{ order or 'asc' }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
      hx-trigger="every 60s"
      hx-swap="outerHTML">
+    <!-- Баннер недоступности: фрагмент заменяет таблицу целиком,
+         без него пользователь увидел бы «пусто» вместо ошибки -->
+    {% include "partials/_service_alert.html" %}
     <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>

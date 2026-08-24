@@ -50,7 +50,7 @@ def add_words():
         return jsonify(result)
     except RequestException as e:
         logger.error("LogSpy API (stoplist add) error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "LogSpy недоступен"}), 500
 
 
 @stoplist_bp.route("/remove", methods=["POST"])
@@ -65,7 +65,7 @@ def remove_word():
         return jsonify(result)
     except RequestException as e:
         logger.error("LogSpy API (stoplist remove) error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "LogSpy недоступен"}), 500
 
 
 @stoplist_bp.route("/replace", methods=["POST"])
@@ -81,4 +81,4 @@ def replace_all():
         return jsonify(result)
     except RequestException as e:
         logger.error("LogSpy API (stoplist replace) error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "LogSpy недоступен"}), 500

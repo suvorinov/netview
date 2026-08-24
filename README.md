@@ -50,9 +50,9 @@ netview/
 
 ### Используемые технологии
 
-- Flask 3.x, Jinja2, TailwindCSS 4 (CDN)
+- Flask 3.x, Jinja2, TailwindCSS 3.4 (прекомпилированный CSS: `make css`)
 - HTMX 2.x — асинхронная подгрузка и сортировка без JS
-- FontAwesome 6 (CDN)
+- FontAwesome 6 (локальные статики)
 
 ### Зависимые сервисы
 
@@ -144,6 +144,7 @@ Compose читает переменные из `.env` (`env_file`). Внутри
 | `make test`     | Запустить тесты (pytest)          |
 | `make lint`     | Проверить код линтером (ruff)     |
 | `make lint-fix` | Автоисправить замечания линтера   |
+| `make css`      | Пересобрать CSS из шаблонов (Tailwind CLI) |
 | `make build`    | docker compose build              |
 | `make up`       | docker compose up -d              |
 | `make down`     | docker compose down               |

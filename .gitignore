@@ -61,6 +61,9 @@ dist/
 *.egg
 .eggs/
 
+# Локальные инструменты (Tailwind CLI и т.п.) — скачиваются через make css
+tools/
+
 # Docker
 .dockerignore.tmp
 

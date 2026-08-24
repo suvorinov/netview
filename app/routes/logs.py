@@ -119,7 +119,7 @@ def api_data():
         return jsonify(data)
     except RequestException as e:
         logger.error("LogSpy API (data) error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "LogSpy недоступен"}), 500
 
 
 @logs_bp.route("/api/summary")
@@ -134,4 +134,4 @@ def api_summary():
         return jsonify(data)
     except RequestException as e:
         logger.error("LogSpy API (summary) error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "LogSpy недоступен"}), 500

@@ -61,16 +61,34 @@ def test_put_with_csrf_field_allowed(client):
     assert response.status_code == 200
 
 
+def _logout(client) -> None:
+    """Выйти через POST-форму (с CSRF-токеном со страницы дашборда)."""
+    page = client.get("/")
+    token = _extract_csrf(page.get_data(as_text=True))
+    client.post("/logout", data={"csrf_token": token})
+
+
 def test_logout_returns_to_login(client):
     login(client)
-    response = client.get("/logout")
+    page = client.get("/")
+    token = _extract_csrf(page.get_data(as_text=True))
+    response = client.post("/logout", data={"csrf_token": token})
     assert response.status_code == 302
     assert "/login" in response.headers["Location"]
 
 
+def test_logout_get_rejected(client):
+    """GET /logout больше не разлогинивает (защита от logout CSRF)."""
+    login(client)
+    response = client.get("/logout")
+    assert response.status_code == 405
+    # Пользователь остался залогинен
+    assert client.get("/").status_code == 200
+
+
 def test_after_logout_redirects_again(client):
     login(client)
-    client.get("/logout")
+    _logout(client)
     response = client.get("/")
     assert response.status_code == 302
 
@@ -84,6 +102,21 @@ def test_next_redirect_after_login(client):
     )
     assert response.status_code == 302
     assert "/hosts/" in response.headers["Location"]
+
+
+def test_login_rotates_session_cookie(client):
+    """При входе cookie сессии меняется (защита от session fixation)."""
+    client.get("/login")
+    assert _session_value(client) is not None
+    before = _session_value(client)
+    login(client)
+    assert _session_value(client) != before
+
+
+def _session_value(client):
+    """Значение session-cookie текущего клиента или None."""
+    cookie = client.get_cookie("session")
+    return cookie.value if cookie else None
 
 
 def _extract_csrf(html: str) -> str:

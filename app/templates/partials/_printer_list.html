@@ -3,6 +3,8 @@
      hx-get="/printers/htmx/list?sort={{ sort_by or '' }}&order={{ order or 'asc' }}"
      hx-trigger="every 60s"
      hx-swap="outerHTML">
+    <!-- Баннер недоступности: фрагмент заменяет таблицу целиком -->
+    {% include "partials/_service_alert.html" %}
     <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>

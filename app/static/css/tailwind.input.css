@@ -1,0 +1,5 @@
+/* Входная точка Tailwind. Скомпилированный результат:
+   app/static/css/app.css (генерируется командой `make css`) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

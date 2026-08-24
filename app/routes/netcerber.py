@@ -270,12 +270,16 @@ def index():
 @netcerber_bp.route("/htmx/list")
 def htmx_list():
     filters = _list_filters(request.args)
+    unavailable_services = []
     try:
         devices, total = _load_devices(filters)
     except RequestException as e:
         devices = []
         total = 0
         logger.error("NetCerber API (devices) error: %s", e)
+        # Фрагмент заменяет список целиком — без баннера это выглядело
+        # бы как «устройств просто нет».
+        unavailable_services.append("NetCerber")
 
     return render_template(
         "partials/_netcerber_device_list.html",
@@ -283,6 +287,7 @@ def htmx_list():
         total=total,
         counts=_device_counts_all(),
         oob=True,
+        unavailable_services=unavailable_services,
         **filters,
     )
 
@@ -338,11 +343,13 @@ def _device_detail_response(device: dict, filters: dict) -> str:
     После авторизации/деавторизации список в фоне перерисовывается,
     чтобы статус в таблице совпадал с реальным.
     """
+    unavailable_services = []
     try:
         devices, total = _load_devices(filters)
     except RequestException as e:
         devices, total = [], 0
         logger.error("NetCerber API (devices) error: %s", e)
+        unavailable_services.append("NetCerber")
     return render_template(
         "partials/_netcerber_device_detail.html",
         device=device,
@@ -351,6 +358,7 @@ def _device_detail_response(device: dict, filters: dict) -> str:
         devices=devices,
         total=total,
         counts=_device_counts_all(),
+        unavailable_services=unavailable_services,
         **filters,
     )
 
@@ -372,17 +380,20 @@ def htmx_authorize_all():
         )
     # Обновляем список в фоне: после авторизации всех статусы изменятся.
     filters = _list_filters(request.form)
+    unavailable_services = []
     try:
         devices, total = _load_devices(filters)
     except RequestException as e:
         devices, total = [], 0
         logger.error("NetCerber API (devices) error: %s", e)
+        unavailable_services.append("NetCerber")
     return render_template(
         "partials/_netcerber_authorize_all.html",
         success=status == "ok",
         message=msg,
         devices=devices,
         total=total,
+        unavailable_services=unavailable_services,
         **filters,
     )
 

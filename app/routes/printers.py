@@ -74,6 +74,7 @@ def htmx_printers_list() -> str:
         HTML-фрагмент со списком принтеров.
     """
     client = _get_client()
+    unavailable_services: list[str] = []
     sort_by = request.args.get("sort", "")
     order = request.args.get("order", "asc")
 
@@ -82,6 +83,9 @@ def htmx_printers_list() -> str:
     except RequestException as e:
         printers = []
         logger.error("Printer Monitor API error: %s", e)
+        # Фрагмент заменяет таблицу целиком — показываем баннер,
+        # а не «пустой список».
+        unavailable_services = ["Printer Monitor"]
 
     printers = sort_items(printers, sort_by, order, SORT_FIELDS)
 
@@ -90,7 +94,8 @@ def htmx_printers_list() -> str:
         printers=printers,
         toner_threshold=_get_toner_threshold(client),
         sort_by=sort_by,
-        order=order
+        order=order,
+        unavailable_services=unavailable_services,
     )
 
 

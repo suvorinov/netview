@@ -1018,3 +1018,120 @@ def test_factories_clients_are_per_app():
     with second.test_request_context():
         second_client = get_printer_client()
     assert first_client is not second_client
+
+
+# ── Баннеры недоступности в HTMX-фрагментах ───────────────────
+
+
+def _raise_connection_error(self, *args, **kwargs):
+    import requests as requests_lib
+
+    raise requests_lib.ConnectionError("service down")
+
+
+def test_hosts_htmx_fragment_shows_banner(logged_client, monkeypatch):
+    """Фрагмент списка хостов при падении сервиса показывает баннер."""
+    monkeypatch.setattr(HostMonitorClient, "get_hosts", _raise_connection_error)
+    html = logged_client.get("/hosts/htmx/list").get_data(as_text=True)
+    assert "недоступен" in html
+    assert "Host Monitor" in html
+
+
+def test_printers_htmx_fragment_shows_banner(logged_client, monkeypatch):
+    monkeypatch.setattr(
+        PrinterMonitorClient, "get_printers", _raise_connection_error
+    )
+    html = logged_client.get("/printers/htmx/list").get_data(as_text=True)
+    assert "недоступен" in html
+    assert "Printer Monitor" in html
+
+
+def test_host_stats_fragment_shows_banner(logged_client, monkeypatch):
+    monkeypatch.setattr(HostMonitorClient, "get_stats", _raise_connection_error)
+    html = logged_client.get("/hosts/stats").get_data(as_text=True)
+    assert "недоступен" in html
+
+
+def test_netcerber_htmx_fragment_shows_banner(logged_client, monkeypatch):
+    monkeypatch.setattr(NetCerberClient, "get_devices", _raise_connection_error)
+    html = logged_client.get("/netcerber/htmx/list").get_data(as_text=True)
+    assert "недоступен" in html
+    assert "NetCerber" in html
+
+
+def test_fragments_have_no_banner_on_success(logged_client):
+    """При рабочем сервисе баннер во фрагменте не рендерится."""
+    html = logged_client.get("/hosts/htmx/list").get_data(as_text=True)
+    assert "недоступен" not in html
+
+
+# ── Санитизация ошибок API (без утечки внутренней диагностики) ─
+
+
+def test_stoplist_add_error_is_sanitized(logged_client, monkeypatch):
+    """JSON-ошибка не содержит деталей соединения из исключения."""
+    import requests as requests_lib
+
+    def boom(self, words):
+        raise requests_lib.ConnectionError(
+            "http://10.255.0.5:8103/api/v1/stoplist: connection refused"
+        )
+
+    monkeypatch.setattr(LogSpyClient, "add_stoplist_words", boom)
+    token = _csrf_token(logged_client)
+    resp = logged_client.post(
+        "/stoplist/add",
+        data={"words": "casino\nbet", "csrf_token": token},
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.get_json() == {"error": "LogSpy недоступен"}
+    assert "10.255.0.5" not in body
+
+
+# ── Карточка пользователя: устойчивость параллельных запросов ──
+
+
+def test_user_detail_survives_activity_failure(logged_client, monkeypatch):
+    """Падение серверной статистики включает фолбэк и баннер."""
+    import requests as requests_lib
+
+    def real_boom(self, username, filename):
+        raise requests_lib.ConnectionError("activity down")
+
+    monkeypatch.setattr(LogSpyClient, "get_ad_user_activity", real_boom)
+    monkeypatch.setattr(
+        LogSpyClient, "get_data",
+        lambda self, filename, **kwargs: {
+            "records": [
+                {
+                    "user": "test@ZR.LOCAL",
+                    "domain": "example.com",
+                    "size": 2048,
+                    "is_blocked": True,
+                    "timestamp_human": "2026-08-24 10:00:00",
+                },
+            ],
+            "pagination": {"total_records": 1},
+        },
+    )
+    resp = logged_client.get("/users/testuser")
+    html = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    # Фолбэк посчитал статистику по записям выборки
+    assert "2.0 KB" in html or "2 KB" in html
+    # И показан баннер недоступности LogSpy
+    assert "LogSpy" in html and "недоступен" in html
+
+
+def test_user_detail_404_when_profile_unavailable(
+    logged_client, monkeypatch
+):
+    """Если профиль не получен — 404, а не страница с пустыми полями."""
+    import requests as requests_lib
+
+    def boom(self, username):
+        raise requests_lib.ConnectionError("profile down")
+
+    monkeypatch.setattr(LogSpyClient, "get_ad_user", boom)
+    resp = logged_client.get("/users/ghost")
+    assert resp.status_code == 404

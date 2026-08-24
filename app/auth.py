@@ -21,6 +21,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 from flask_login import LoginManager, UserMixin, current_user, login_user, logout_user
@@ -109,6 +110,10 @@ def login():
             users = _parse_users()
             stored = users.get(username)
             if stored and _verify_password(password, stored):
+                # Сброс старой сессии перед входом — защита от session
+                # fixation: злоумышленник не может подсунуть жертве
+                # заранее известный идентификатор сессии.
+                session.clear()
                 login_user(User(username))
                 logger.info("Вход: %s", username)
                 next_url = request.args.get("next")
@@ -121,9 +126,13 @@ def login():
     return render_template("auth/login.html")
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
-    """Выйти из системы."""
+    """Выйти из системы.
+
+    Только POST (с CSRF-токеном): GET-ссылка позволяла разлогинить
+    пользователя картинкой `<img src="/logout">` на сторонней странице.
+    """
     name = current_user.id if current_user.is_authenticated else None
     logout_user()
     if name:
