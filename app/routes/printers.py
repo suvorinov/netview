@@ -111,7 +111,7 @@ def check_printers() -> str:
         result = client.check_printers()
     except RequestException as e:
         logger.error("Printer Monitor API error: %s", e)
-        message = f"Ошибка проверки: {e}"
+        message = "Printer Monitor недоступен"
     else:
         # Формирование сообщения вне try: ошибка формы ответа — наш баг,
         # а не «сервис недоступен».

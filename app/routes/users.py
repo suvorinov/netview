@@ -298,6 +298,40 @@ def api_user_activity(username: str):
         return jsonify({"error": "LogSpy недоступен"}), 500
 
 
+def _domain_stats(records: list[dict]) -> list[dict]:
+    """Сводка блокировок по доменам: повторные визиты суммируются.
+
+    Args:
+        records: Заблокированные записи из LogSpy.
+
+    Returns:
+        [{"domain", "count", "size"}], отсортировано по числу
+        посещений (по убыванию); при равенстве — по трафику.
+    """
+    stats: dict[str, dict[str, int]] = {}
+    for r in records:
+        domain = r.get("domain")
+        if not domain:
+            continue
+        entry = stats.setdefault(domain, {"count": 0, "size": 0})
+        entry["count"] += 1
+        entry["size"] += r.get("size") or 0
+    return sorted(
+        ({"domain": d, **v} for d, v in stats.items()),
+        key=lambda e: (e["count"], e["size"]),
+        reverse=True,
+    )
+
+
+def _safe_filename(name: str) -> str:
+    """Оставить в имени файла только символы, допустимые в заголовке.
+
+    Username приходит из URL: кавычки/переводы строк в заголовке
+    Content-Disposition недопустимы.
+    """
+    return re.sub(r"[^A-Za-z0-9._-]", "_", name) or "user"
+
+
 @users_bp.route("/<username>/export/blocked")
 def export_blocked_report(username: str):
     """HTML-отчёт о посещении заблокированных ресурсов.
@@ -305,6 +339,11 @@ def export_blocked_report(username: str):
     Записи берутся напрямую из LogSpy с серверным фильтром
     status="blocked", поэтому отчёт не зависит от того, что
     показано на странице пользователя.
+
+    Помимо списка запросов отчёт содержит сводку по доменам
+    (повторные посещения и трафик просуммированы) и время,
+    проведённое на заблокированных ресурсах — серверная
+    агрегация LogSpy за весь файл журнала.
     """
     client = get_logspy_client()
 
@@ -324,23 +363,30 @@ def export_blocked_report(username: str):
 
     records: list[dict] = []
     blocked_total = 0
+    time_on_blocked: float | None = None
     if log_file:
-        try:
-            data = client.get_data(
+        # Записи блокировок и серверная статистика независимы — параллельно.
+        results = _run_parallel({
+            "blocked_records": lambda: client.get_data(
                 log_file, user=user_upn, status="blocked", limit=500
-            )
+            ),
+            "activity": lambda: client.get_ad_user_activity(user_upn, log_file),
+        })
+
+        data = results["blocked_records"]
+        if data is not None:
             records = data.get("records", [])
             # Истинное число блокировок за файл — из пагинации LogSpy,
             # даже если записей больше, чем помещается в отчёт.
             blocked_total = (data.get("pagination", {}) or {}).get(
                 "total_records", len(records)
             )
-        except RequestException as e:
-            logger.error(
-                "LogSpy API (blocked records=%s) error: %s", username, e
-            )
 
-    domains = sorted({r.get("domain") for r in records if r.get("domain")})
+        server_stats = results["activity"]
+        if server_stats:
+            time_on_blocked = server_stats.get("time_on_blocked")
+
+    domain_rows = _domain_stats(records)
     blocked_traffic = sum(r.get("size", 0) for r in records if r.get("size"))
 
     return Response(
@@ -351,14 +397,19 @@ def export_blocked_report(username: str):
             log_file=log_file,
             records=records,
             blocked_total=blocked_total,
-            domains=domains,
+            domain_rows=domain_rows,
             blocked_traffic=blocked_traffic,
+            time_on_blocked_formatted=(
+                format_duration(time_on_blocked)
+                if time_on_blocked is not None
+                else "—"
+            ),
             generated_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
         ),
         mimetype="text/html",
         headers={
             "Content-Disposition": (
-                f"attachment; filename=blocked_{username}.html"
+                f"attachment; filename=blocked_{_safe_filename(username)}.html"
             )
         },
     )

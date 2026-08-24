@@ -163,7 +163,7 @@ def update_threshold():
         return render_template(
             "partials/_settings_result.html",
             success=False,
-            message=f"Ошибка: {str(e)}"
+            message="Printer Monitor недоступен"
         )
 
 
@@ -198,7 +198,7 @@ def update_interval():
         return render_template(
             "partials/_settings_result.html",
             success=False,
-            message=f"Ошибка: {str(e)}"
+            message="Printer Monitor недоступен"
         )
 
 

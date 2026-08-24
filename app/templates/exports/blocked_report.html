@@ -35,11 +35,37 @@
 <div class="stats">
   <span>Заблокировано запросов: {{ blocked_total }}</span>
   <span>Записей в отчёте: {{ records|length }}</span>
-  <span>Доменов: {{ domains|length }}</span>
+  <span>Доменов: {{ domain_rows|length }}</span>
   <span>Трафик по блокировкам: {{ blocked_traffic|human_size }}</span>
+  <span>Время на заблокированных: {{ time_on_blocked_formatted }}</span>
 </div>
 
+<h2>Сводка по доменам ({{ domain_rows|length }})</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Домен</th>
+      <th>Посещений</th>
+      <th>Трафик</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in domain_rows %}
+    <tr>
+      <td>{{ d.domain }}</td>
+      <td class="num">{{ d.count }}</td>
+      <td class="num" title="{{ d.size }} B">{{ d.size|human_size }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3">Нет данных</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
 <h2>Заблокированные запросы</h2>
+{% if records|length < blocked_total %}
+<p class="meta">Показаны первые {{ records|length }} из {{ blocked_total }} заблокированных запросов; итоговые счётчики и время рассчитаны по всему файлу журнала.</p>
+{% endif %}
 <table>
   <thead>
     <tr>
@@ -66,12 +92,5 @@
   {% endfor %}
   </tbody>
 </table>
-
-{% if domains %}
-<h2>Домены ({{ domains|length }})</h2>
-<p style="font-size: 12px;">
-  {%- for d in domains %}{{ d }}{% if not loop.last %}, {% endif %}{% endfor -%}
-</p>
-{% endif %}
 </body>
 </html>

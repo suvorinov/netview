@@ -121,7 +121,7 @@ def is_new_device(device: dict[str, Any], days: int = 7) -> bool:
     return seen >= datetime.now(UTC) - timedelta(days=days)
 
 
-def _ip_to_int(ip: Any) -> int | None:
+def ip_to_int(ip: Any) -> int | None:
     """IPv4-адрес в целое число для сравнения диапазонов.
 
     Returns:
@@ -148,7 +148,7 @@ def parse_dhcp_pool(value: str | None) -> tuple[str, str] | None:
         start, end = (part.strip() for part in str(value).split(","))
     except ValueError:
         return None
-    if _ip_to_int(start) is None or _ip_to_int(end) is None:
+    if ip_to_int(start) is None or ip_to_int(end) is None:
         return None
     return start, end
 
@@ -165,9 +165,9 @@ def is_in_dhcp_pool(ip: Any, pool: tuple[str, str] | None) -> bool:
     """
     if not pool:
         return False
-    value = _ip_to_int(ip)
-    start = _ip_to_int(pool[0])
-    end = _ip_to_int(pool[1])
+    value = ip_to_int(ip)
+    start = ip_to_int(pool[0])
+    end = ip_to_int(pool[1])
     if value is None or start is None or end is None:
         return False
     return start <= value <= end
@@ -194,6 +194,12 @@ def sort_items(
     остальные — как строки без учёта регистра. Неизвестное поле
     сортировки возвращает список без изменений. Пустые значения
     всегда уходят в конец списка (аналог NULLS LAST).
+
+    Note:
+        Тип колонки определяется по ПЕРВОМУ непустому значению.
+        Если в колонке смешаны типы (например, числа и строки
+        "N/A"), вся колонка сортируется как строки. Для таблиц
+        панели это приемлемо: значения внутри колонок однородны.
 
     Args:
         items: Список словарей.

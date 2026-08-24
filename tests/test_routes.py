@@ -399,6 +399,89 @@ def test_user_page_shows_blocked_export_button(logged_client):
     assert "/users/Valentin.Gorohov/export/blocked" in html
 
 
+def _blocked_record(domain: str, size: int) -> dict:
+    """Минимальная заблокированная запись LogSpy для тестов отчёта."""
+    return {
+        "timestamp_human": "2026-08-24 10:00:00",
+        "url": f"http://{domain}/x",
+        "domain": domain,
+        "method": "GET",
+        "status_code": 403,
+        "size": size,
+        "is_blocked": True,
+    }
+
+
+def test_user_blocked_export_aggregates_domains(logged_client, monkeypatch):
+    """Повторные посещения домена суммируются: счётчик и трафик."""
+
+    def fake_get_data(self, filename, **kwargs):
+        return {
+            "records": [
+                _blocked_record("example.com", 1000),
+                _blocked_record("example.com", 500),
+                _blocked_record("casino.example", 2000),
+            ],
+            "pagination": {"total_records": 3},
+        }
+
+    monkeypatch.setattr(LogSpyClient, "get_data", fake_get_data)
+    html = logged_client.get(
+        "/users/Valentin.Gorohov/export/blocked"
+    ).get_data(as_text=True)
+    assert "Сводка по доменам (2)" in html
+    # example.com (2 визита) идёт раньше casino.example (1 визит)
+    assert html.index("example.com") < html.index("casino.example")
+    row = re.search(
+        r"<td>example\.com</td>\s*<td class=\"num\">2</td>"
+        r"\s*<td class=\"num\"[^>]*>1\.5 KB</td>",
+        html,
+    )
+    assert row, "строка сводки example.com: 2 визита / 1.5 KB не найдена"
+
+
+def test_user_blocked_export_shows_time_on_blocked(
+    logged_client, monkeypatch
+):
+    """Время на заблокированных ресурсах — из серверной статистики."""
+    monkeypatch.setattr(
+        LogSpyClient, "get_ad_user_activity",
+        lambda self, username, filename: {
+            "username": username,
+            "time_on_blocked": 3725,
+        },
+    )
+    html = logged_client.get(
+        "/users/Valentin.Gorohov/export/blocked"
+    ).get_data(as_text=True)
+    assert "Время на заблокированных: 1:02:05" in html
+
+
+def test_user_blocked_export_truncation_note(logged_client, monkeypatch):
+    """При усечении списка отчёт честно предупреждает об этом."""
+
+    def fake_get_data(self, filename, **kwargs):
+        return {
+            "records": [_blocked_record("example.com", 100)],
+            "pagination": {"total_records": 700},
+        }
+
+    monkeypatch.setattr(LogSpyClient, "get_data", fake_get_data)
+    html = logged_client.get(
+        "/users/Valentin.Gorohov/export/blocked"
+    ).get_data(as_text=True)
+    assert "Показаны первые 1 из 700" in html
+    assert "700</span>" in html  # итоговый счётчик — по всему файлу
+
+
+def test_user_blocked_export_sanitizes_filename(logged_client):
+    """Спецсимволы из username не попадают в Content-Disposition."""
+    resp = logged_client.get("/users/bad%3Cname%3E/export/blocked")
+    assert 'filename=blocked_bad_name_.html' in (
+        resp.headers["Content-Disposition"]
+    )
+
+
 def test_user_page_hides_blocked_export_without_blocks(
     logged_client, monkeypatch
 ):

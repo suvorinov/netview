@@ -14,7 +14,7 @@ from requests import RequestException
 
 from app.api.factories import get_logspy_client, get_netcerber_client
 from app.utils import (
-    _ip_to_int,
+    ip_to_int,
     is_in_dhcp_pool,
     is_new_device,
     is_router_vendor,
@@ -319,7 +319,7 @@ def htmx_authorize(device_id: int):
     except RequestException as e:
         logger.error("NetCerber API (authorize=%s) error: %s", device_id, e)
         return render_template(
-            "partials/_error_message.html", message=str(e)
+            "partials/_error_message.html", message="NetCerber недоступен"
         )
 
 
@@ -333,7 +333,7 @@ def htmx_unauthorize(device_id: int):
     except RequestException as e:
         logger.error("NetCerber API (unauthorize=%s) error: %s", device_id, e)
         return render_template(
-            "partials/_error_message.html", message=str(e)
+            "partials/_error_message.html", message="NetCerber недоступен"
         )
 
 
@@ -376,7 +376,7 @@ def htmx_authorize_all():
         return render_template(
             "partials/_netcerber_message.html",
             success=False,
-            message=str(e),
+            message="NetCerber недоступен",
         )
     # Обновляем список в фоне: после авторизации всех статусы изменятся.
     filters = _list_filters(request.form)
@@ -412,9 +412,9 @@ def export_html():
         devices = _enrich(data.get("items", []), pool)
     except RequestException as e:
         logger.error("NetCerber API (export) error: %s", e)
-        return render_template("partials/_error_message.html", message=str(e))
+        return render_template("partials/_error_message.html", message="NetCerber недоступен")
     # В печатном отчёте удобнее читать список, отсортированный по IP.
-    devices.sort(key=lambda d: _ip_to_int(d.get("ip_address")) or 0)
+    devices.sort(key=lambda d: ip_to_int(d.get("ip_address")) or 0)
     return Response(
         render_template(
             "exports/devices_report.html",
@@ -553,7 +553,7 @@ def htmx_trigger_scan():
         return render_template(
             "partials/_netcerber_message.html",
             success=False,
-            message=str(e),
+            message="NetCerber недоступен",
         )
     # В ответе дополнительно обновляем блок статуса (hx-swap-oob),
     # чтобы сразу увидеть "Сканирование..." и автообновление журнала.
@@ -627,7 +627,7 @@ def htmx_scheduler_toggle():
         return render_template(
             "partials/_netcerber_scheduler.html",
             scheduler=_scheduler_status(),
-            message=(False, str(e)),
+            message=(False, "NetCerber недоступен"),
         )
 
 
@@ -653,7 +653,7 @@ def htmx_scheduler_interval():
         return render_template(
             "partials/_netcerber_scheduler.html",
             scheduler=_scheduler_status(),
-            message=(False, str(e)),
+            message=(False, "NetCerber недоступен"),
         )
 
 
@@ -666,7 +666,7 @@ def htmx_set_baseline(scan_id: int):
         return _render_scan_list(filters, flash=(True, f"Эталонный снимок #{scan_id} установлен"))
     except RequestException as e:
         logger.error("NetCerber API (set baseline=%s) error: %s", scan_id, e)
-        return _render_scan_list(filters, flash=(False, str(e)))
+        return _render_scan_list(filters, flash=(False, "NetCerber недоступен"))
 
 
 @netcerber_bp.route("/htmx/clear-baseline", methods=["POST"])
@@ -678,7 +678,7 @@ def htmx_clear_baseline():
         return _render_scan_list(filters, flash=(True, "Эталонный снимок сброшен"))
     except RequestException as e:
         logger.error("NetCerber API (clear baseline) error: %s", e)
-        return _render_scan_list(filters, flash=(False, str(e)))
+        return _render_scan_list(filters, flash=(False, "NetCerber недоступен"))
 
 
 @netcerber_bp.route("/htmx/delete-scan/<int:scan_id>", methods=["POST"])
@@ -690,7 +690,7 @@ def htmx_delete_scan(scan_id: int):
         return _render_scan_list(filters, flash=(True, f"Запись #{scan_id} удалена"))
     except RequestException as e:
         logger.error("NetCerber API (delete scan=%s) error: %s", scan_id, e)
-        return _render_scan_list(filters, flash=(False, str(e)))
+        return _render_scan_list(filters, flash=(False, "NetCerber недоступен"))
 
 
 @netcerber_bp.route("/htmx/delete-scans", methods=["POST"])
