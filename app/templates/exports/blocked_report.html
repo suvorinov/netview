@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Заблокированные ресурсы — {{ user.sAMAccountName }}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 20px 0 8px; }
+  .meta { color: #6b7280; font-size: 12px; margin-bottom: 12px; }
+  .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+          padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+  .stats span { display: inline-block; background: #fee2e2; color: #b91c1c;
+                border-radius: 6px; padding: 4px 10px; margin: 2px 8px 2px 0;
+                font-weight: bold; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left;
+           vertical-align: top; }
+  th { background: #f3f4f6; }
+  td.num { text-align: right; white-space: nowrap; }
+  td.url { max-width: 380px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<h1>Отчёт о посещении заблокированных ресурсов</h1>
+<p class="meta">NetView &middot; сформировано {{ generated_at }}{% if log_file %} &middot; файл журнала: {{ log_file }}{% endif %}</p>
+
+<div class="card">
+  <b>{{ user.displayName or user.sAMAccountName }}</b>
+  ({{ user.sAMAccountName }}{% if user_upn and user_upn != user.sAMAccountName %} &middot; {{ user_upn }}{% endif %})
+  {% if user.department %}&middot; отдел: {{ user.department }}{% endif %}
+  {% if user.title %}&middot; должность: {{ user.title }}{% endif %}
+</div>
+
+<div class="stats">
+  <span>Заблокировано запросов: {{ blocked_total }}</span>
+  <span>Записей в отчёте: {{ records|length }}</span>
+  <span>Доменов: {{ domains|length }}</span>
+  <span>Трафик по блокировкам: {{ blocked_traffic|human_size }}</span>
+</div>
+
+<h2>Заблокированные запросы</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Время</th>
+      <th>URL</th>
+      <th>Домен</th>
+      <th>Метод</th>
+      <th>Статус</th>
+      <th>Размер</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in records %}
+    <tr>
+      <td class="num">{{ r.timestamp_human }}</td>
+      <td class="url">{{ r.url }}</td>
+      <td>{{ r.domain }}</td>
+      <td>{{ r.method }}</td>
+      <td class="num">{{ r.status_code }}</td>
+      <td class="num" title="{{ r.size }} B">{{ r.size|human_size }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6">Нет данных</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if domains %}
+<h2>Домены ({{ domains|length }})</h2>
+<p style="font-size: 12px;">
+  {%- for d in domains %}{{ d }}{% if not loop.last %}, {% endif %}{% endfor -%}
+</p>
+{% endif %}
+</body>
+</html>

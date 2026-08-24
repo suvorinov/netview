@@ -7,26 +7,26 @@
 import logging
 
 from flask import Blueprint, current_app, jsonify, render_template, request
+from requests import RequestException
 
-from app.api.logspy_client import LogSpyClient
+from app.api.factories import get_logspy_client
 
 logs_bp = Blueprint("logs", __name__)
 
 logger = logging.getLogger(__name__)
 
 
-def _get_logspy_client() -> LogSpyClient:
-    return LogSpyClient(current_app.config["LOGSPY_API_URL"])
-
-
 @logs_bp.route("/")
 def index():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     log_file = request.args.get("file", "")
     search = request.args.get("search", "").strip()
     user_filter = request.args.get("user", "").strip()
-    if user_filter and "@" not in user_filter:
-        user_filter = f"{user_filter}@{current_app.config['AD_DOMAIN']}"
+    # Домен дописываем только если он настроен: при пустом AD_DOMAIN
+    # фильтр "user@" не совпадёт ни с одной записью.
+    ad_domain = current_app.config["AD_DOMAIN"]
+    if user_filter and "@" not in user_filter and ad_domain:
+        user_filter = f"{user_filter}@{ad_domain}"
     status_filter = request.args.get("status", "").strip()
     sort = request.args.get("sort", "time_desc")
     page = request.args.get("page", 1, type=int)
@@ -35,7 +35,7 @@ def index():
     unavailable_services = []
     try:
         log_files = client.get_logs()
-    except Exception as e:
+    except RequestException as e:
         log_files = []
         logger.error("LogSpy API (logs list) error: %s", e)
         unavailable_services.append("LogSpy")
@@ -58,13 +58,16 @@ def index():
                 status=status_filter or None,
                 sort=sort,
             )
+        except RequestException as e:
+            logger.error("LogSpy API (logs data) error: %s", e)
+            unavailable_services.append("LogSpy")
+        else:
+            # Разбор ответа вне try: ошибка формы данных — наш баг,
+            # а не «сервис недоступен».
             raw_records = data.get("records", [])
             records = [r for r in raw_records if r.get("user") and r["user"] != "-"]
             stats = data.get("stats", {})
             pagination = data.get("pagination", pagination)
-        except Exception as e:
-            logger.error("LogSpy API (logs data) error: %s", e)
-            unavailable_services.append("LogSpy")
 
     return render_template(
         "logs.html",
@@ -83,7 +86,7 @@ def index():
 
 @logs_bp.route("/api/file-info")
 def api_file_info():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     log_file = request.args.get("file", "")
     if not log_file:
         return ""
@@ -91,14 +94,14 @@ def api_file_info():
     try:
         info = client.get_file_info(log_file, sample_size=500)
         return render_template("partials/_file_info.html", file_info=info)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (file info) error: %s", e)
         return '<span class="text-gray-400 text-xs">Информация недоступна</span>'
 
 
 @logs_bp.route("/api/data")
 def api_data():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     log_file = request.args.get("file", "")
     if not log_file:
         return jsonify({"error": "file parameter required"}), 400
@@ -114,14 +117,14 @@ def api_data():
             sort=request.args.get("sort", "time_desc"),
         )
         return jsonify(data)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (data) error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @logs_bp.route("/api/summary")
 def api_summary():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     log_file = request.args.get("file", "")
     if not log_file:
         return jsonify({"error": "file parameter required"}), 400
@@ -129,6 +132,6 @@ def api_summary():
     try:
         data = client.get_summary(log_file)
         return jsonify(data)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (summary) error: %s", e)
         return jsonify({"error": str(e)}), 500

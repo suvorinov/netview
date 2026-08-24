@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Устройства сети — NetView</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: #6b7280; font-size: 12px; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; }
+  .num { white-space: nowrap; }
+  .ok { color: #047857; font-weight: bold; }
+  .bad { color: #b91c1c; font-weight: bold; }
+  .flag { display: inline-block; background: #fef3c7; border: 1px solid #f59e0b;
+          border-radius: 4px; padding: 0 4px; margin: 1px 2px 1px 0; font-size: 11px;
+          white-space: nowrap; }
+</style>
+</head>
+<body>
+<h1>Устройства сети (NetCerber)</h1>
+<p class="meta">NetView &middot; сформировано {{ generated_at }} &middot; всего устройств: {{ total }}</p>
+<table>
+  <thead>
+    <tr>
+      <th>IP-адрес</th>
+      <th>MAC</th>
+      <th>Hostname</th>
+      <th>Вендор</th>
+      <th>Впервые замечено</th>
+      <th>Статус</th>
+      <th>Признаки</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in devices %}
+    <tr>
+      <td class="num">{{ d.ip_address }}</td>
+      <td class="num">{{ d.mac_address }}</td>
+      <td>{{ d.hostname }}</td>
+      <td>{{ d.vendor }}</td>
+      <td class="num">{{ d.first_seen|datetime }}</td>
+      <td>
+        {% if d.is_authorized %}
+        <span class="ok">Авторизовано</span>
+        {% else %}
+        <span class="bad">Не авторизовано</span>
+        {% endif %}
+      </td>
+      <td>
+        {% set flags = d['_flags'] or {} %}
+        {% if flags.router %}<span class="flag">Сетевое оборудование</span>{% endif %}
+        {% if flags.new %}<span class="flag">Новое (7 дн.)</span>{% endif %}
+        {% if flags.unknown %}<span class="flag">Неизвестное</span>{% endif %}
+        {% if flags.dhcp %}<span class="flag">DHCP-пул</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</body>
+</html>

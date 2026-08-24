@@ -200,3 +200,20 @@ def test_is_in_dhcp_pool_disabled_or_broken():
     assert not is_in_dhcp_pool("192.168.0.100", ("bad", "end"))
     assert not is_in_dhcp_pool("не-адрес", ("192.168.0.31", "192.168.0.199"))
     assert not is_in_dhcp_pool(None, ("192.168.0.31", "192.168.0.199"))
+
+
+# ── Шаблонные фильтры ────────────────────────────────────────
+
+
+def test_time_ago_handles_tz_aware(app):
+    """Дата со смещением таймзоны не роняет фильтр (раньше — TypeError)."""
+    time_ago = app.jinja_env.filters["time_ago"]
+    assert time_ago("2026-08-21T10:00:00+03:00")
+    assert time_ago(None) == "—"
+
+
+def test_time_ago_naive_string(app):
+    """Наивная дата по-прежнему обрабатывается (30 секунд — «только что»)."""
+    time_ago = app.jinja_env.filters["time_ago"]
+    recent = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
+    assert time_ago(recent) == "только что"

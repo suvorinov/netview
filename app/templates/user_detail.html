@@ -99,6 +99,12 @@
                class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
                 <i class="fas fa-file-alt"></i> Открыть в Логах
             </a>
+            {% if activity and activity.blocked_requests > 0 %}
+            <a href="{{ url_for('users.export_blocked_report', username=user.sAMAccountName) }}"
+               class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                <i class="fas fa-file-code"></i> Экспорт HTML
+            </a>
+            {% endif %}
             <span class="text-xs text-gray-500">Файл: {{ current_log }}</span>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">

@@ -6,6 +6,7 @@
 import logging
 
 from flask import Blueprint, current_app, render_template, request
+from requests import RequestException
 
 from app.api.host_client import HostMonitorClient
 from app.utils import sort_items
@@ -49,7 +50,7 @@ def hosts_list() -> str:
         data = client.get_hosts(page=1, limit=500)
         hosts = data.get("items", [])
         stats = client.get_stats()
-    except Exception as e:
+    except RequestException as e:
         hosts = []
         stats = {"total": 0, "online": 0, "offline": 0}
         logger.error("Host Monitor API error: %s", e)
@@ -78,7 +79,7 @@ def htmx_hosts_list() -> str:
     try:
         data = client.get_hosts(page=1, limit=500, status=status_filter)
         hosts = data.get("items", [])
-    except Exception as e:
+    except RequestException as e:
         hosts = []
         logger.error("Host Monitor API error: %s", e)
 
@@ -103,7 +104,7 @@ def hosts_stats() -> str:
     client = _get_client()
     try:
         stats = client.get_stats()
-    except Exception as e:
+    except RequestException as e:
         stats = {"total": 0, "online": 0, "offline": 0}
         logger.error("Host Monitor API error: %s", e)
 
@@ -123,7 +124,7 @@ def htmx_host_detail(hostname: str) -> str:
     client = _get_client()
     try:
         host = client.get_host(hostname)
-    except Exception as e:
+    except RequestException as e:
         host = {}
         logger.error("Host Monitor API error (host=%s): %s", hostname, e)
 

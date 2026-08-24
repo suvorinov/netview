@@ -6,6 +6,7 @@
 import logging
 
 from flask import Blueprint, current_app, render_template, request
+from requests import RequestException
 
 from app.api.printer_client import PrinterMonitorClient
 from app.utils import sort_items
@@ -34,10 +35,11 @@ def _get_client() -> PrinterMonitorClient:
 def _get_toner_threshold(client: PrinterMonitorClient) -> int:
     """Порог критического тонера из API (по умолчанию 20)."""
     try:
-        return client.get_threshold().get("threshold", 20)
-    except Exception as e:
+        data = client.get_threshold()
+    except RequestException as e:
         logger.error("Printer Monitor threshold error: %s", e)
         return 20
+    return data.get("threshold", 20)
 
 
 @printers_bp.route("/")
@@ -51,7 +53,7 @@ def printers_list() -> str:
     unavailable_services = []
     try:
         printers = client.get_printers()
-    except Exception as e:
+    except RequestException as e:
         printers = []
         logger.error("Printer Monitor API error: %s", e)
         unavailable_services.append("Printer Monitor")
@@ -77,7 +79,7 @@ def htmx_printers_list() -> str:
 
     try:
         printers = client.get_printers()
-    except Exception as e:
+    except RequestException as e:
         printers = []
         logger.error("Printer Monitor API error: %s", e)
 
@@ -102,9 +104,16 @@ def check_printers() -> str:
     client = _get_client()
     try:
         result = client.check_printers()
-        message = f"{result['message']}. Проверено: {result['printers_count']}, низкий тонер: {result['low_toner_count']}"
-    except Exception as e:
-        message = f"Ошибка проверки: {str(e)}"
+    except RequestException as e:
         logger.error("Printer Monitor API error: %s", e)
+        message = f"Ошибка проверки: {e}"
+    else:
+        # Формирование сообщения вне try: ошибка формы ответа — наш баг,
+        # а не «сервис недоступен».
+        message = (
+            f"{result['message']}. "
+            f"Проверено: {result['printers_count']}, "
+            f"низкий тонер: {result['low_toner_count']}"
+        )
 
     return render_template("partials/_check_result.html", message=message)

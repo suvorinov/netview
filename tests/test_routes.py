@@ -93,10 +93,6 @@ def mock_api_clients(monkeypatch):
         NetCerberClient, "authorize_all_devices",
         lambda self, description="": {"status": "ok", "message": "ok"},
     )
-    monkeypatch.setattr(
-        NetCerberClient, "export_devices",
-        lambda self, fmt="csv": "MAC,IP\n00:11:22:33:44:55,192.168.0.201\n",
-    )
     monkeypatch.setattr(LogSpyClient, "ad_resolve_ip", lambda self, ip: None)
     monkeypatch.setattr(LogSpyClient, "get_ad_computers", lambda self, **kwargs: [])
     monkeypatch.setattr(LogSpyClient, "get_health", lambda self: {"status": "ok"})
@@ -323,12 +319,106 @@ def test_netcerber_pagination(logged_client, monkeypatch):
     assert "Показать ещё" not in html_all
 
 
-def test_netcerber_export_csv(logged_client):
-    """Экспорт отдаёт CSV-файл."""
-    resp = logged_client.get("/netcerber/export?format=csv")
+def test_netcerber_export_html(logged_client, monkeypatch):
+    """Экспорт отдаёт HTML-отчёт: устройства, признаки, сортировка по IP."""
+    from app.api.netcerber_client import NetCerberClient
+
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices",
+        lambda self, **kwargs: _netcerber_devices_fixture(),
+    )
+    resp = logged_client.get("/netcerber/export")
     assert resp.status_code == 200
-    assert "text/csv" in resp.content_type
-    assert "00:11:22:33:44:55" in resp.get_data(as_text=True)
+    assert "text/html" in resp.content_type
+    assert "devices.html" in resp.headers.get("Content-Disposition", "")
+    html = resp.get_data(as_text=True)
+    # Устройства из фикстуры и вычисленные признаки на месте
+    assert "192.168.0.201" in html
+    assert "zr-printer-01.zr.local" in html
+    assert "Сетевое оборудование" in html  # TP-LINK с неизвестным hostname
+    assert "Новое" in html
+    assert "Не авторизовано" in html
+    # Сортировка по IP: .100 идёт раньше .201 независимо от порядка выборки
+    assert html.index("192.168.0.100") < html.index("192.168.0.201")
+
+
+def test_user_blocked_export_html(logged_client, monkeypatch):
+    """Отчёт о заблокированных ресурсах содержит записи, сводку и домены."""
+    from app.api.logspy_client import LogSpyClient
+
+    captured: dict = {}
+
+    def fake_get_data(self, filename, **kwargs):
+        captured.update(kwargs)
+        return {
+            "records": [
+                {
+                    "timestamp_human": "2026-08-20 08:00:01",
+                    "url": "http://example.com/x",
+                    "domain": "example.com",
+                    "method": "GET",
+                    "status_code": 403,
+                    "size": 1200,
+                    "is_blocked": True,
+                },
+                {
+                    "timestamp_human": "2026-08-20 08:05:00",
+                    "url": "http://casino.example/",
+                    "domain": "casino.example",
+                    "method": "GET",
+                    "status_code": 403,
+                    "size": 500,
+                    "is_blocked": True,
+                },
+            ],
+            "pagination": {"total_records": 2},
+        }
+
+    monkeypatch.setattr(LogSpyClient, "get_data", fake_get_data)
+    resp = logged_client.get("/users/Valentin.Gorohov/export/blocked")
+    assert resp.status_code == 200
+    # Лимит запроса не превышает максимум API LogSpy (500)
+    assert captured.get("limit") == 500
+    assert "text/html" in resp.content_type
+    assert (
+        "blocked_Valentin.Gorohov.html"
+        in resp.headers["Content-Disposition"]
+    )
+    html = resp.get_data(as_text=True)
+    assert "Valentin.Gorohov" in html
+    assert "example.com" in html
+    assert "casino.example" in html
+    assert "1.7 KB" in html  # суммарный трафик блокировок (1700 B)
+    assert "access.log" in html
+
+
+def test_user_page_shows_blocked_export_button(logged_client):
+    """При наличии блокировок на странице есть кнопка экспорта отчёта."""
+    html = logged_client.get("/users/Valentin.Gorohov").get_data(as_text=True)
+    assert "Экспорт HTML" in html
+    assert "/users/Valentin.Gorohov/export/blocked" in html
+
+
+def test_user_page_hides_blocked_export_without_blocks(
+    logged_client, monkeypatch
+):
+    """Без заблокированных запросов кнопки экспорта нет."""
+    from app.api.logspy_client import LogSpyClient
+
+    monkeypatch.setattr(
+        LogSpyClient, "get_ad_user_activity",
+        lambda self, username, filename: {
+            "username": username,
+            "total_requests": 10,
+            "total_traffic": 1000,
+            "blocked_requests": 0,
+            "time_on_blocked": 0,
+            "domains_visited": [],
+            "last_activity": "",
+        },
+    )
+    html = logged_client.get("/users/Valentin.Gorohov").get_data(as_text=True)
+    assert "Экспорт HTML" not in html
 
 
 def test_netcerber_authorize_updates_list(logged_client):
@@ -478,10 +568,13 @@ def test_user_detail_shows_server_stats(logged_client):
 
 def test_user_detail_fallback_when_activity_unavailable(logged_client, monkeypatch):
     """Если серверный endpoint activity недоступен — фолбэк без падения."""
+    import requests as requests_lib
+
     from app.api.logspy_client import LogSpyClient
 
     def boom(*args, **kwargs):
-        raise ConnectionError("LogSpy down")
+        # Клиенты raising'ают именно requests-исключения.
+        raise requests_lib.ConnectionError("LogSpy down")
 
     monkeypatch.setattr(LogSpyClient, "get_ad_user_activity", boom)
     response = logged_client.get("/users/Valentin.Gorohov")
@@ -698,12 +791,46 @@ def test_settings_shows_services_health(logged_client):
 
 
 def test_settings_marks_unavailable_service(logged_client, monkeypatch):
+    import requests as requests_lib
+
     def boom(self):
-        raise ConnectionError("down")
+        raise requests_lib.ConnectionError("down")
 
     monkeypatch.setattr(HostMonitorClient, "get_stats", boom)
     html = logged_client.get("/settings/").get_data(as_text=True)
     assert "Недоступен" in html
+
+
+# ── Устойчивость к мусорным параметрам и кэш счётчиков ───────
+
+
+def test_netcerber_garbage_pagination_params(logged_client):
+    """Мусор в skip/limit не роняет страницу и журнал (раньше — 500)."""
+    assert logged_client.get("/netcerber/?limit=abc&skip=xyz").status_code == 200
+    assert logged_client.get(
+        "/netcerber/htmx/scans?limit=abc&skip=xyz"
+    ).status_code == 200
+
+
+def test_netcerber_counts_cached_between_requests(logged_client, monkeypatch):
+    """Счётчики чипов кэшируются: повторная загрузка страницы не выгружает
+    все устройства из API второй раз."""
+    from app.api.netcerber_client import NetCerberClient
+
+    calls: list[dict] = []
+
+    def fake_devices(self, **kwargs):
+        calls.append(kwargs)
+        return {"items": [], "total": 0}
+
+    monkeypatch.setattr(NetCerberClient, "get_devices", fake_devices)
+    logged_client.get("/netcerber/")
+    first = len(calls)
+    assert first >= 2  # страница списка + полная выборка для счётчиков
+
+    logged_client.get("/netcerber/")
+    added = len(calls) - first
+    assert added < first  # счётчики взяты из кэша — запросов меньше
 
 
 # ── Вкладка «Компьютеры» на Users ─────────────────────────────
@@ -733,3 +860,161 @@ def test_users_computers_tab(logged_client, monkeypatch):
 def test_users_tab_switch_links(logged_client):
     html = logged_client.get("/users/").get_data(as_text=True)
     assert '/users/?view=computers' in html
+
+
+# ── Валидация настроек Printer Monitor ────────────────────────
+
+
+def test_settings_threshold_rejects_out_of_range(
+    logged_client, monkeypatch
+):
+    """Порог вне 0–100 не уходит в API, показывается ошибка."""
+    called = []
+    monkeypatch.setattr(
+        PrinterMonitorClient, "set_threshold",
+        lambda self, threshold: called.append(threshold),
+    )
+    token = _csrf_token(logged_client)
+    for bad in ("-5", "150"):
+        html = logged_client.put(
+            "/settings/htmx/threshold",
+            data={"threshold": bad, "csrf_token": token},
+        ).get_data(as_text=True)
+        assert "от 0 до 100" in html
+    assert not called
+
+
+def test_settings_threshold_accepts_valid_value(
+    logged_client, monkeypatch
+):
+    monkeypatch.setattr(
+        PrinterMonitorClient, "set_threshold",
+        lambda self, threshold: {"threshold": threshold},
+    )
+    html = logged_client.put(
+        "/settings/htmx/threshold",
+        data={"threshold": "35", "csrf_token": _csrf_token(logged_client)},
+    ).get_data(as_text=True)
+    assert "Порог установлен: 35%" in html
+
+
+def test_settings_interval_rejects_out_of_range(
+    logged_client, monkeypatch
+):
+    """Интервал вне 10–86400 сек не уходит в API."""
+    called = []
+    monkeypatch.setattr(
+        PrinterMonitorClient, "set_check_interval",
+        lambda self, interval: called.append(interval),
+    )
+    token = _csrf_token(logged_client)
+    for bad in ("0", "999999"):
+        html = logged_client.put(
+            "/settings/htmx/interval",
+            data={"interval": bad, "csrf_token": token},
+        ).get_data(as_text=True)
+        assert "от 10 до 86400" in html
+    assert not called
+
+
+def test_settings_interval_garbage_falls_back_to_default(
+    logged_client, monkeypatch
+):
+    """Мусор во входе заменяется default (300) и проходит валидацию."""
+    captured = {}
+
+    def fake_set_interval(self, interval):
+        captured["interval"] = interval
+        return {"interval": interval}
+
+    monkeypatch.setattr(
+        PrinterMonitorClient, "set_check_interval", fake_set_interval,
+    )
+    logged_client.put(
+        "/settings/htmx/interval",
+        data={"interval": "abc", "csrf_token": _csrf_token(logged_client)},
+    )
+    assert captured["interval"] == 300
+
+
+# ── Фильтр пользователя в Логах при пустом AD_DOMAIN ──────────
+
+
+def test_logs_user_filter_without_ad_domain(logged_client, app, monkeypatch):
+    """При пустом AD_DOMAIN домен к имени НЕ дописывается.
+
+    Раньше фильтр превращался в "user@" и не совпадал ни с чем.
+    """
+    captured = {}
+
+    def fake_get_data(self, filename, **kwargs):
+        captured.update(kwargs)
+        return {"records": [], "pagination": {"total_records": 0}}
+
+    monkeypatch.setattr(LogSpyClient, "get_data", fake_get_data)
+    app.config["AD_DOMAIN"] = ""
+    logged_client.get("/logs/?user=ivanov")
+    assert captured.get("user") == "ivanov"
+
+
+def test_logs_user_filter_appends_configured_domain(
+    logged_client, app, monkeypatch
+):
+    """Настроенный AD_DOMAIN дописывается к имени без '@'."""
+    captured = {}
+
+    def fake_get_data(self, filename, **kwargs):
+        captured.update(kwargs)
+        return {"records": [], "pagination": {"total_records": 0}}
+
+    monkeypatch.setattr(LogSpyClient, "get_data", fake_get_data)
+    app.config["AD_DOMAIN"] = "ZR.LOCAL"
+    logged_client.get("/logs/?user=ivanov")
+    assert captured.get("user") == "ivanov@ZR.LOCAL"
+
+
+def test_logs_explicit_domain_not_duplicated(logged_client, app, monkeypatch):
+    """Имя с '@' передаётся как есть — домен второй раз не приклеивается."""
+    captured = {}
+
+    def fake_get_data(self, filename, **kwargs):
+        captured.update(kwargs)
+        return {"records": [], "pagination": {"total_records": 0}}
+
+    monkeypatch.setattr(LogSpyClient, "get_data", fake_get_data)
+    app.config["AD_DOMAIN"] = "ZR.LOCAL"
+    logged_client.get("/logs/?user=ivanov@OTHER.LOCAL")
+    assert captured.get("user") == "ivanov@OTHER.LOCAL"
+
+
+# ── Фабрики клиентов: кэширование на экземпляре приложения ────
+
+
+def test_factories_cache_clients_on_app(app):
+    """Повторный вызов фабрики возвращает того же клиента (keep-alive)."""
+    from app.api.factories import (
+        get_host_client,
+        get_logspy_client,
+        get_netcerber_client,
+        get_printer_client,
+    )
+
+    with app.test_request_context():
+        assert get_printer_client() is get_printer_client()
+        assert get_host_client() is get_host_client()
+        assert get_logspy_client() is get_logspy_client()
+        assert get_netcerber_client() is get_netcerber_client()
+
+
+def test_factories_clients_are_per_app():
+    """У разных экземпляров приложения — разные клиенты (изоляция тестов)."""
+    from app import create_app
+    from app.api.factories import get_printer_client
+
+    first = create_app()
+    second = create_app()
+    with first.test_request_context():
+        first_client = get_printer_client()
+    with second.test_request_context():
+        second_client = get_printer_client()
+    assert first_client is not second_client

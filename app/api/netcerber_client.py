@@ -6,8 +6,6 @@
 
 from typing import Any
 
-import requests
-
 from app.api.base import BaseApiClient
 
 
@@ -41,16 +39,6 @@ class NetCerberClient(BaseApiClient):
         if unauthorized is not None:
             params["unauthorized"] = unauthorized
         return self._get("/api/v1/devices", params)
-
-    def export_devices(self, fmt: str = "csv") -> str:
-        """Выгрузить устройства в файл (CSV) — сырой текст ответа."""
-        response = requests.get(
-            f"{self.base_url}/api/v1/devices/export",
-            params={"format": fmt},
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        return response.text
 
     def get_device(self, device_id: int) -> dict[str, Any]:
         return self._get(f"/api/v1/devices/{device_id}")

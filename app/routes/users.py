@@ -6,19 +6,23 @@
 
 import logging
 import re
+from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import (
+    Blueprint,
+    Response,
+    jsonify,
+    render_template,
+    request,
+)
+from requests import RequestException
 
-from app.api.logspy_client import LogSpyClient
+from app.api.factories import get_logspy_client
 from app.utils import format_duration, human_size
 
 users_bp = Blueprint("users", __name__)
 
 logger = logging.getLogger(__name__)
-
-
-def _get_logspy_client() -> LogSpyClient:
-    return LogSpyClient(current_app.config["LOGSPY_API_URL"])
 
 
 def _get_user_upn(user: dict) -> str:
@@ -47,7 +51,7 @@ def _get_user_upn(user: dict) -> str:
 
 @users_bp.route("/")
 def index():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     search = request.args.get("search", "").strip()
     ou_filter = request.args.get("ou", "").strip()
     dept_filter = request.args.get("department", "").strip()
@@ -59,7 +63,7 @@ def index():
     if view == "computers":
         try:
             computers = client.get_ad_computers()
-        except Exception as e:
+        except RequestException as e:
             computers = []
             logger.error("LogSpy API (ad computers) error: %s", e)
             unavailable_services.append("LogSpy")
@@ -77,14 +81,14 @@ def index():
             department=dept_filter or None,
             enabled_only=True,
         )
-    except Exception as e:
+    except RequestException as e:
         users = []
         logger.error("LogSpy API (ad users) error: %s", e)
         unavailable_services.append("LogSpy")
 
     try:
         ous = client.get_ad_ous()
-    except Exception as e:
+    except RequestException as e:
         ous = []
         logger.error("LogSpy API (ad ous) error: %s", e)
         unavailable_services.append("LogSpy")
@@ -103,18 +107,18 @@ def index():
 
 @users_bp.route("/<username>")
 def detail(username: str):
-    client = _get_logspy_client()
+    client = get_logspy_client()
     unavailable_services = []
 
     try:
         user = client.get_ad_user(username)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (ad user=%s) error: %s", username, e)
         return render_template("errors/404.html", message="Пользователь не найден"), 404
 
     try:
         current_log = client.get_current_log()
-    except Exception as e:
+    except RequestException as e:
         current_log = ""
         logger.error("LogSpy API (logs list) error: %s", e)
         unavailable_services.append("LogSpy")
@@ -131,24 +135,26 @@ def detail(username: str):
             all_data = client.get_data(
                 current_log, user=user_upn, limit=500
             )
+        except RequestException as e:
+            logger.error("LogSpy API (user records=%s) error: %s", username, e)
+            unavailable_services.append("LogSpy")
+        else:
+            # Разбор ответа вне try: ошибка формы данных — наш баг,
+            # а не «сервис недоступен».
             raw_records = all_data.get("records", [])
             all_records = [
                 r for r in raw_records
                 if r.get("user") and r["user"] != "-"
             ]
-
             blocked_records = [
                 r for r in all_records if r.get("is_blocked")
             ]
-        except Exception as e:
-            logger.error("LogSpy API (user records=%s) error: %s", username, e)
-            unavailable_services.append("LogSpy")
 
         # Точная статистика за весь файл — серверная агрегация LogSpy.
         server_stats = None
         try:
             server_stats = client.get_ad_user_activity(user_upn, current_log)
-        except Exception as e:
+        except RequestException as e:
             logger.error("LogSpy API (user activity=%s) error: %s", username, e)
             unavailable_services.append("LogSpy")
 
@@ -191,12 +197,13 @@ def detail(username: str):
                 blocked_data = client.get_data(
                     current_log, user=user_upn, status="blocked", limit=1
                 )
-                blocked_total = (blocked_data.get("pagination", {}) or {}).get(
-                    "total_records", blocked_total
-                )
-            except Exception as e:
+            except RequestException as e:
                 logger.error(
                     "LogSpy API (user blocked stats=%s) error: %s", username, e
+                )
+            else:
+                blocked_total = (blocked_data.get("pagination", {}) or {}).get(
+                    "total_records", blocked_total
                 )
 
             activity = {
@@ -227,12 +234,12 @@ def detail(username: str):
 
 @users_bp.route("/api/<username>/activity")
 def api_user_activity(username: str):
-    client = _get_logspy_client()
+    client = get_logspy_client()
 
     try:
         user = client.get_ad_user(username)
         user_upn = _get_user_upn(user)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (ad user=%s) error: %s", username, e)
         user_upn = username
 
@@ -240,7 +247,7 @@ def api_user_activity(username: str):
     if not log_file:
         try:
             log_file = client.get_current_log()
-        except Exception as e:
+        except RequestException as e:
             logger.error("LogSpy API (logs list) error: %s", e)
             return jsonify({"error": "No log file"}), 400
 
@@ -255,6 +262,72 @@ def api_user_activity(username: str):
             sort=request.args.get("sort", "time_desc"),
         )
         return jsonify(data)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (user activity=%s) error: %s", username, e)
         return jsonify({"error": str(e)}), 500
+
+
+@users_bp.route("/<username>/export/blocked")
+def export_blocked_report(username: str):
+    """HTML-отчёт о посещении заблокированных ресурсов.
+
+    Записи берутся напрямую из LogSpy с серверным фильтром
+    status="blocked", поэтому отчёт не зависит от того, что
+    показано на странице пользователя.
+    """
+    client = get_logspy_client()
+
+    try:
+        user = client.get_ad_user(username)
+    except RequestException as e:
+        logger.error("LogSpy API (ad user=%s) error: %s", username, e)
+        return render_template("errors/404.html", message="Пользователь не найден"), 404
+
+    user_upn = _get_user_upn(user)
+
+    try:
+        log_file = client.get_current_log()
+    except RequestException as e:
+        log_file = ""
+        logger.error("LogSpy API (logs list) error: %s", e)
+
+    records: list[dict] = []
+    blocked_total = 0
+    if log_file:
+        try:
+            data = client.get_data(
+                log_file, user=user_upn, status="blocked", limit=500
+            )
+            records = data.get("records", [])
+            # Истинное число блокировок за файл — из пагинации LogSpy,
+            # даже если записей больше, чем помещается в отчёт.
+            blocked_total = (data.get("pagination", {}) or {}).get(
+                "total_records", len(records)
+            )
+        except RequestException as e:
+            logger.error(
+                "LogSpy API (blocked records=%s) error: %s", username, e
+            )
+
+    domains = sorted({r.get("domain") for r in records if r.get("domain")})
+    blocked_traffic = sum(r.get("size", 0) for r in records if r.get("size"))
+
+    return Response(
+        render_template(
+            "exports/blocked_report.html",
+            user=user,
+            user_upn=user_upn,
+            log_file=log_file,
+            records=records,
+            blocked_total=blocked_total,
+            domains=domains,
+            blocked_traffic=blocked_traffic,
+            generated_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
+        ),
+        mimetype="text/html",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=blocked_{username}.html"
+            )
+        },
+    )

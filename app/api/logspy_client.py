@@ -40,6 +40,10 @@ class LogSpyClient(BaseApiClient):
 
     # Data
 
+    # Максимум записей за один запрос: API LogSpy отклоняет большие
+    # значения ошибкой валидации (422).
+    MAX_LIMIT = 500
+
     def get_data(
         self,
         filename: str,
@@ -53,7 +57,8 @@ class LogSpyClient(BaseApiClient):
         params: dict[str, Any] = {
             "filename": filename,
             "page": page,
-            "limit": limit,
+            # Страховка от превышения лимита API: обрезаем, а не падаем.
+            "limit": min(int(limit), self.MAX_LIMIT),
             "sort": sort,
         }
         if search:

@@ -21,8 +21,8 @@ lint-fix: ## Автоисправить замечания линтера
 run: ## Запустить приложение
 	./.venv/bin/python run.py
 
-dev: ## Запустить в режиме разработки (hot-reload)
-	FLASK_ENV=development ./.venv/bin/python run.py
+dev: ## Запустить в режиме разработки (hot-reload, отладчик)
+	DEBUG=1 ./.venv/bin/python run.py
 
 stop: ## Остановить контейнеры
 	docker compose down

@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from flask import Flask, redirect, request, url_for
 from flask_login import current_user
@@ -71,7 +71,10 @@ def create_app(config_class=Config) -> Flask:
                 value = datetime.fromisoformat(value)
             except (ValueError, TypeError):
                 return value
-        diff = datetime.now() - value
+        # Значение может быть с таймзоной (ISO со смещением) или без неё:
+        # вычитание naive - aware бросает TypeError и роняло страницу.
+        now = datetime.now(UTC) if value.tzinfo else datetime.now()
+        diff = now - value
         seconds = int(diff.total_seconds())
         if seconds < 60:
             return "только что"

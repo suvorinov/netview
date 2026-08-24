@@ -6,26 +6,23 @@
 
 import logging
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request
+from requests import RequestException
 
-from app.api.logspy_client import LogSpyClient
+from app.api.factories import get_logspy_client
 
 stoplist_bp = Blueprint("stoplist", __name__)
 
 logger = logging.getLogger(__name__)
 
 
-def _get_logspy_client() -> LogSpyClient:
-    return LogSpyClient(current_app.config["LOGSPY_API_URL"])
-
-
 @stoplist_bp.route("/")
 def index():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     unavailable_services = []
     try:
         stoplist = client.get_stoplist()
-    except Exception as e:
+    except RequestException as e:
         stoplist = {"words": [], "total": 0, "path": ""}
         logger.error("LogSpy API (stoplist) error: %s", e)
         unavailable_services.append("LogSpy")
@@ -39,7 +36,7 @@ def index():
 
 @stoplist_bp.route("/add", methods=["POST"])
 def add_words():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     words_text = request.form.get("words", "").strip()
     if not words_text:
         return jsonify({"error": "words required"}), 400
@@ -51,14 +48,14 @@ def add_words():
     try:
         result = client.add_stoplist_words(words)
         return jsonify(result)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (stoplist add) error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @stoplist_bp.route("/remove", methods=["POST"])
 def remove_word():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     word = request.form.get("word", "").strip()
     if not word:
         return jsonify({"error": "word required"}), 400
@@ -66,14 +63,14 @@ def remove_word():
     try:
         result = client.remove_stoplist_word(word)
         return jsonify(result)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (stoplist remove) error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @stoplist_bp.route("/replace", methods=["POST"])
 def replace_all():
-    client = _get_logspy_client()
+    client = get_logspy_client()
     words_text = request.form.get("words", "").strip()
     if not words_text:
         return jsonify({"error": "words required"}), 400
@@ -82,6 +79,6 @@ def replace_all():
     try:
         result = client.replace_stoplist(words)
         return jsonify(result)
-    except Exception as e:
+    except RequestException as e:
         logger.error("LogSpy API (stoplist replace) error: %s", e)
         return jsonify({"error": str(e)}), 500

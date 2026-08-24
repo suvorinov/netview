@@ -1,7 +1,8 @@
 """Базовый HTTP-клиент для всех внутренних сервисов NetView.
 
 Единая точка обработки запросов: таймаут, проверка статуса ответа,
-десериализация JSON.
+десериализация JSON. Каждый клиент держит собственную requests.Session —
+TCP-соединения переиспользуются между вызовами (keep-alive).
 """
 
 from typing import Any
@@ -26,6 +27,11 @@ class BaseApiClient:
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        # Сессия переиспользует TCP-соединения: одна страница Dashboard
+        # делает ~10 запросов к сервисам, и без keep-alive это 10
+        # рукопожатий. Пул соединений urllib3 потокобезопасен, поэтому
+        # параллельные задачи Dashboard могут делить один клиент.
+        self._session = requests.Session()
 
     def _request(self, method: str, path: str, **kwargs) -> Any:
         """Выполнить запрос к API и вернуть JSON-ответ.
@@ -40,9 +46,10 @@ class BaseApiClient:
             Данные ответа (dict, list или None для пустых ответов).
 
         Raises:
-            requests.HTTPError: При некорректном статусе ответа.
+            requests.RequestException: При сетевой ошибке или
+                некорректном статусе ответа.
         """
-        response = requests.request(
+        response = self._session.request(
             method,
             f"{self.base_url}{path}",
             timeout=self.timeout,

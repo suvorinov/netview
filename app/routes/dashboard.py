@@ -8,12 +8,15 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from flask import Blueprint, current_app, render_template
+from flask import Blueprint, render_template
+from requests import RequestException
 
-from app.api.host_client import HostMonitorClient
-from app.api.logspy_client import LogSpyClient
-from app.api.netcerber_client import NetCerberClient
-from app.api.printer_client import PrinterMonitorClient
+from app.api.factories import (
+    get_host_client,
+    get_logspy_client,
+    get_netcerber_client,
+    get_printer_client,
+)
 from app.utils import is_new_device, is_router_vendor, is_unknown_device
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -25,18 +28,6 @@ CRITICAL_PERCENT = 80
 
 # Значения по умолчанию при недоступности сервисов
 EMPTY_HOST_STATS = {"total": 0, "online": 0, "offline": 0, "avg_cpu": 0}
-
-
-def _get_printer_client() -> PrinterMonitorClient:
-    return PrinterMonitorClient(current_app.config["PRINTER_API_URL"])
-
-
-def _get_host_client() -> HostMonitorClient:
-    return HostMonitorClient(current_app.config["HOST_API_URL"])
-
-
-def _get_logspy_client() -> LogSpyClient:
-    return LogSpyClient(current_app.config["LOGSPY_API_URL"])
 
 
 def _run_task(
@@ -58,7 +49,7 @@ def _run_task(
     """
     try:
         return fn(), None
-    except Exception as e:
+    except RequestException as e:
         logger.error("%s API (%s) error: %s", service, name, e)
         return default, service
 
@@ -104,10 +95,10 @@ def _critical_hosts(
 
 @dashboard_bp.route("/")
 def index() -> str:
-    printer_client = _get_printer_client()
-    host_client = _get_host_client()
-    logspy_client = _get_logspy_client()
-    netcerber_client = NetCerberClient(current_app.config["NETCERBER_API_URL"])
+    printer_client = get_printer_client()
+    host_client = get_host_client()
+    logspy_client = get_logspy_client()
+    netcerber_client = get_netcerber_client()
 
     # Независимые запросы выполняем параллельно, чтобы страница не ждала
     # каждый сервис по очереди (при недоступном сервисе — до 20 секунд).
@@ -178,14 +169,17 @@ def index() -> str:
     if log_files:
         try:
             summary = logspy_client.get_summary(log_files[0]["name"])
+        except RequestException as e:
+            logger.error("LogSpy API (logs/summary) error: %s", e)
+            unavailable.add("LogSpy")
+        else:
+            # Разбор ответа вне try: ошибка формы данных — наш баг,
+            # а не «сервис недоступен», и не должен маскироваться.
             ip_summary = summary.get("summary", {})
             for item in ip_summary.values():
                 blocked_count += item.get("blocked_visits", 0)
                 total_requests += item.get("total_visits", 0)
             unique_users = len(ip_summary)
-        except Exception as e:
-            logger.error("LogSpy API (logs/summary) error: %s", e)
-            unavailable.add("LogSpy")
 
     stoplist_count = results["stoplist"].get("total", 0)
 
