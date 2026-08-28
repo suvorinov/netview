@@ -4,6 +4,7 @@
 форматирование размеров и сортировка списков словарей.
 """
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -93,6 +94,29 @@ def is_router_vendor(vendor: str, hostname_unknown: bool = False) -> bool:
     return any(m in v for m in ROUTER_VENDOR_MARKERS)
 
 
+def is_vendor_mismatch(vendor: str, hostname_known: bool) -> bool:
+    """Роутерный вендор при разрешённом имени хоста — рассинхрон данных.
+
+    Роутеры почти никогда не регистрируются в DNS/AD, поэтому сочетание
+    «роутерный вендор + разрешённое имя ПК» — почти всегда устаревшая
+    запись: например, DHCP выдал IP другому устройству, а MAC и вендор
+    в записи остались от прежнего владельца адреса.
+
+    Args:
+        vendor: Название производителя из NetCerber.
+        hostname_known: hostname разрешился (не пуст и не
+            "Неизвестное устройство").
+
+    Returns:
+        True для признака «расхождение данных». ASUSTek исключён:
+        их платы массово стоят в ПК, там это норма, а не конфликт.
+    """
+    v = (vendor or "").upper()
+    if "ASUSTEK" in v:
+        return False
+    return bool(hostname_known) and any(m in v for m in ROUTER_VENDOR_MARKERS)
+
+
 def is_unknown_device(device: dict[str, Any]) -> bool:
     """Устройство без разрешённого hostname (не нашлось в DNS/AD)."""
     hostname = (device.get("hostname") or "").strip()
@@ -151,6 +175,111 @@ def parse_dhcp_pool(value: str | None) -> tuple[str, str] | None:
     if ip_to_int(start) is None or ip_to_int(end) is None:
         return None
     return start, end
+
+
+def normalize_mac(raw: Any) -> str | None:
+    """Привести MAC-адрес к каноническому виду XX:XX:XX:XX:XX:XX.
+
+    Принимает форматы с разделителями ":" и "-" и без них,
+    в любом регистре. Некорректные значения -> None.
+    """
+    if not raw:
+        return None
+    digits = re.sub(r"[^0-9A-Fa-f]", "", str(raw))
+    if len(digits) != 12:
+        return None
+    return ":".join(digits[i : i + 2].upper() for i in range(0, 12, 2))
+
+
+def parse_mac_list(value: str | None) -> tuple[str, ...]:
+    """Разобрать список MAC через запятую в кортеж нормализованных адресов.
+
+    Битые записи пропускаются. Используется для списка защищённых
+    MAC-адресов, которые запрещено блокировать.
+    """
+    if not value:
+        return ()
+    result = []
+    for part in value.split(","):
+        mac = normalize_mac(part.strip())
+        if mac and mac not in result:
+            result.append(mac)
+    return tuple(result)
+
+
+def is_protected_mac(mac: str | None, protected: tuple[str, ...] | str | None) -> bool:
+    """Входит ли MAC в список защищённых (блокировка запрещена).
+
+    Входной адрес нормализуется, поэтому сравниваются канонические
+    формы независимо от разделителей и регистра.
+    """
+    if not mac:
+        return False
+    canon = normalize_mac(mac)
+    if not canon:
+        return False
+    if isinstance(protected, str):
+        protected = parse_mac_list(protected)
+    return canon in (protected or ())
+
+
+def _parse_ts(value: Any) -> datetime | None:
+    """ISO-строку в datetime; naive считается UTC. Ошибка -> None."""
+    if not value:
+        return None
+    try:
+        ts = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    # Сравнивать между собой можно только однотипные даты:
+    # наивные считаем UTC, aware переводим в UTC.
+    return ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts.astimezone(UTC)
+
+
+def device_recency(device: dict[str, Any]) -> tuple[datetime, int]:
+    """Ключ «насколько запись свежая» для сортировки reverse=True:
+    сначала более новый last_seen/first_seen, при равенстве —
+    больший id (запись создана позже).
+    """
+    moment = _parse_ts(device.get("last_seen")) or _parse_ts(
+        device.get("first_seen")
+    )
+    return moment or datetime.min.replace(tzinfo=UTC), int(device.get("id") or 0)
+
+
+def group_devices_by_ip(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Сгруппировать записи устройств по IP-адресу.
+
+    NetCerber идентифицирует устройство по MAC: когда DHCP выдаёт
+    адрес другому MAC, появляется новая запись, а старая остаётся
+    (история). Для отображения списка это выглядит как «дубли по IP».
+
+    Возвращает первичные записи — свежайшую по каждому IP — с ключом
+    "_history": остальные записи группы, отсортированные от свежих
+    к старым. Порядок первичных записей сохраняется входной.
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+    order: list[str] = []
+    for device in devices:
+        key = str(device.get("ip_address") or f"#{device.get('id')}")
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(device)
+
+    result: list[dict[str, Any]] = []
+    for key in order:
+        members = sorted(groups[key], key=device_recency, reverse=True)
+        primary = members[0]
+        history = members[1:]
+        # Объект записи мог участвовать в прошлой группировке
+        # (словари переиспользуются) — устаревшее значение "_history"
+        # не должно переживать текущий вызов.
+        primary.pop("_history", None)
+        if history:
+            primary["_history"] = history
+        result.append(primary)
+    return result
 
 
 def is_in_dhcp_pool(ip: Any, pool: tuple[str, str] | None) -> bool:

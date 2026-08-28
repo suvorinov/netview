@@ -5,10 +5,10 @@
 
 import logging
 
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, render_template, request
 from requests import RequestException
 
-from app.api.host_client import HostMonitorClient
+from app.api.factories import get_host_client
 from app.utils import sort_items
 
 hosts_bp = Blueprint("hosts", __name__)
@@ -27,15 +27,6 @@ SORT_FIELDS: dict[str, str] = {
 }
 
 
-def _get_client() -> HostMonitorClient:
-    """Создать клиент Host Monitor API.
-
-    Returns:
-        Экземпляр клиента.
-    """
-    return HostMonitorClient(current_app.config["HOST_API_URL"])
-
-
 @hosts_bp.route("/")
 def hosts_list() -> str:
     """Страница списка хостов.
@@ -43,7 +34,7 @@ def hosts_list() -> str:
     Returns:
         HTML-шаблон со списком хостов.
     """
-    client = _get_client()
+    client = get_host_client()
     unavailable_services = []
     try:
         # Пагинация не используется: показываем все хосты одним списком
@@ -71,7 +62,7 @@ def htmx_hosts_list() -> str:
     Returns:
         HTML-фрагмент со списком хостов.
     """
-    client = _get_client()
+    client = get_host_client()
     unavailable_services: list[str] = []
     status_filter = request.args.get("status", None)
     sort_by = request.args.get("sort", "")
@@ -106,7 +97,7 @@ def hosts_stats() -> str:
     Returns:
         HTML-фрагмент со статистикой.
     """
-    client = _get_client()
+    client = get_host_client()
     unavailable_services: list[str] = []
     try:
         stats = client.get_stats()
@@ -132,7 +123,7 @@ def htmx_host_detail(hostname: str) -> str:
     Returns:
         HTML-фрагмент с информацией о хосте.
     """
-    client = _get_client()
+    client = get_host_client()
     try:
         host = client.get_host(hostname)
     except RequestException as e:

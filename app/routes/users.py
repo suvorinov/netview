@@ -251,8 +251,13 @@ def detail(username: str):
                 "blocked_shown": len(blocked_records),
             }
 
+    template = (
+        "partials/_user_detail.html"
+        if request.headers.get("HX-Request")
+        else "user_detail.html"
+    )
     return render_template(
-        "user_detail.html",
+        template,
         user=user,
         user_upn=user_upn,
         activity=activity,

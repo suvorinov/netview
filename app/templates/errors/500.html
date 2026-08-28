@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}NetView - 500{% endblock %}
+{% block page_title %}Внутренняя ошибка{% endblock %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center py-16">
+    <i class="fas fa-bug text-red-500 text-6xl mb-4"></i>
+    <h3 class="text-xl font-bold mb-2">Что-то пошло не так</h3>
+    <p class="text-gray-500 mb-6">Произошла внутренняя ошибка сервера. Подробности записаны в журнал приложения.</p>
+    <div class="flex gap-3">
+        <a href="/" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            <i class="fas fa-home mr-1"></i> На главную
+        </a>
+        <button onclick="location.reload()"
+                class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+            <i class="fas fa-redo mr-1"></i> Повторить
+        </button>
+    </div>
+</div>
+{% endblock %}

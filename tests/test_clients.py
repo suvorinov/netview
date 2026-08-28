@@ -42,6 +42,23 @@ def test_logspy_get_data_caps_limit(monkeypatch):
     assert captured["limit"] == LogSpyClient.MAX_LIMIT == 500
 
 
+def test_logspy_client_timeout_from_config():
+    """Фабрика берёт таймаут из конфига (LOGSPY_TIMEOUT), а не дефолт 15 с."""
+    from app import create_app
+    from app.api.factories import get_logspy_client
+
+    app = create_app()
+    app.config.update(LOGSPY_API_URL="http://logspy.test", LOGSPY_TIMEOUT=45)
+    with app.app_context():
+        assert get_logspy_client().timeout == 45
+
+    # без явной настройки — дефолт 60 с
+    app2 = create_app()
+    app2.config.update(LOGSPY_API_URL="http://logspy.test")
+    with app2.app_context():
+        assert get_logspy_client().timeout == 60
+
+
 class TestBaseApiClient:
     """Контракты базового клиента: успех и классы ошибок."""
 

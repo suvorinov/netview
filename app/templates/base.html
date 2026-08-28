@@ -33,6 +33,8 @@
         .htmx-indicator { display: none; }
         .htmx-request .htmx-indicator { display: inline-block; }
         .htmx-request.htmx-indicator { display: inline-block; }
+        /* Во время HTMX-запроса кнопки гаснут и не дают двойной клик */
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
     </style>
 
     <script>
@@ -136,6 +138,32 @@
             class="hidden fixed bottom-6 right-6 z-50 p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700">
         <i class="fas fa-arrow-up"></i>
     </button>
+
+    <!-- Кастомный диалог подтверждения: заменяет системный confirm()
+         для всех hx-confirm через перехват события htmx:confirm -->
+    <div id="app-confirm" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div class="flex items-start gap-3 mb-4">
+                <i id="app-confirm-icon" class="fas fa-circle-question text-blue-500 text-xl mt-0.5"></i>
+                <h3 class="text-lg font-semibold">Подтверждение</h3>
+            </div>
+            <p id="app-confirm-text" class="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line mb-6 ml-8"></p>
+            <div class="flex gap-2 justify-end">
+                <button type="button" onclick="appConfirm.hide()"
+                        class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 text-sm">
+                    Отмена
+                </button>
+                <button type="button" id="app-confirm-ok"
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                    <i class="fas fa-check mr-1"></i>Продолжить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контейнер тостов (замена системного alert) -->
+    <div id="app-toasts" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] space-y-2 w-full max-w-md px-4"></div>
+
     <script>
         const scrollTopBtn = document.getElementById('scroll-top');
         window.addEventListener('scroll', () => {
@@ -153,6 +181,62 @@
                 );
             } catch (e) { /* приватный режим */ }
         }
+
+        // ── Кастомные диалоги (замена alert/confirm) ────────────────
+        window.appConfirm = {
+            _onOk: null,
+            show(text, onOk, danger = true) {
+                this._onOk = onOk;
+                document.getElementById('app-confirm-text').textContent = text;
+                const ok = document.getElementById('app-confirm-ok');
+                // Разрушительное действие — красная кнопка, остальное — синяя
+                ok.className = 'px-4 py-2 text-white rounded-lg text-sm ' +
+                    (danger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700');
+                document.getElementById('app-confirm').classList.remove('hidden');
+            },
+            hide() {
+                this._onOk = null;
+                document.getElementById('app-confirm').classList.add('hidden');
+            },
+            accept() {
+                const cb = this._onOk;
+                this.hide();
+                if (cb) cb();
+            }
+        };
+        document.getElementById('app-confirm-ok')
+            .addEventListener('click', () => appConfirm.accept());
+        // Esc и клик по фону закрывают диалог
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') appConfirm.hide();
+        });
+        document.getElementById('app-confirm').addEventListener('click', (e) => {
+            if (e.target.id === 'app-confirm') appConfirm.hide();
+        });
+
+        // Все hx-confirm в приложении идут через кастомный диалог:
+        // preventDefault отменяет нативный confirm, issueRequest(true)
+        // выполняет запрос от имени HTMX.
+        document.addEventListener('htmx:confirm', (e) => {
+            const question = e.detail.question;
+            if (!question) return;
+            e.preventDefault();
+            appConfirm.show(question, () => e.detail.issueRequest(true));
+        });
+
+        // Тост вместо alert(): auto-hide через 4с, ошибки — дольше
+        window.appNotify = function(message, isError = false) {
+            const box = document.createElement('div');
+            box.className = 'flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm ' +
+                (isError
+                    ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200');
+            box.innerHTML = '<i class="fas fa-' + (isError ? 'exclamation' : 'check') + '-circle"></i>';
+            box.appendChild(document.createTextNode(message));
+            const container = document.getElementById('app-toasts');
+            container.appendChild(box);
+            setTimeout(() => box.remove(), isError ? 7000 : 4000);
+        };
     </script>
 </body>
 </html>

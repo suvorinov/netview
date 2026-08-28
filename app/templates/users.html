@@ -5,6 +5,44 @@
 
 {% block content %}
 {% include "partials/_service_alert.html" %}
+
+<style>
+    #logs-spinner { display: none; }
+    #logs-spinner.show { display: flex; }
+</style>
+<!-- Оверлей «Просматриваю логи…» на весь экран, виден на время загрузки -->
+<div id="logs-spinner"
+     class="fixed inset-0 z-[100] items-center justify-center bg-black/40">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl px-8 py-6 flex flex-col items-center gap-4">
+        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-gray-700 dark:text-gray-200 font-medium">Просматриваю логи…</p>
+    </div>
+</div>
+<script>
+    function showSpinner() {
+        const overlay = document.getElementById('logs-spinner');
+        if (overlay) overlay.classList.add('show');
+    }
+    function hideSpinner() {
+        const overlay = document.getElementById('logs-spinner');
+        if (overlay) overlay.classList.remove('show');
+    }
+    // При открытии пользователя список скрывается, остаётся только деталь.
+    document.addEventListener('htmx:beforeRequest', (e) => {
+        if (e.detail.elt && e.detail.elt.dataset.userDetail !== undefined) {
+            const list = document.getElementById('user-list-view');
+            if (list) list.style.display = 'none';
+            showSpinner();
+        }
+    });
+    document.addEventListener('htmx:afterSwap', hideSpinner);
+    document.addEventListener('htmx:responseError', hideSpinner);
+    document.addEventListener('htmx:sendError', hideSpinner);
+</script>
+<!-- Контейнер, куда подгружается страница пользователя по HTMX -->
+<div id="user-detail-container"></div>
+
+<div id="user-list-view">
 <!-- Вкладки: Пользователи / Компьютеры -->
 <div class="mb-4 flex gap-2">
     <a href="/users/"
@@ -126,7 +164,12 @@
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                 {% for u in users %}
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                    onclick="window.location='/users/{{ u.sAMAccountName }}'">
+                    data-user-detail
+                    hx-get="/users/{{ u.sAMAccountName }}"
+                    hx-target="#user-detail-container"
+                    hx-swap="innerHTML"
+                    hx-push-url="/users/{{ u.sAMAccountName }}"
+                    title="Открыть пользователя">
                     <td class="px-4 py-3 font-medium">{{ u.sAMAccountName }}</td>
                     <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ u.displayName or '—' }}</td>
                     <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ u.department or '—' }}</td>
@@ -156,6 +199,8 @@
         <p>Пользователи не найдены</p>
     </div>
     {% endif %}
+    </div>
 </div>
 {% endif %}
+</div>
 {% endblock %}

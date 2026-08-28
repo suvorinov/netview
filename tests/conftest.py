@@ -5,8 +5,21 @@ import re
 
 import pytest
 
-os.environ["SECRET_KEY"] = "test-secret"
-os.environ["AUTH_USERS"] = "admin:admin123"
+# Тесты должны быть детерминированными независимо от локального .env
+# разработчика (config.py подхватывает его автоматически). Явно
+# фиксируем всё, что влияет на поведение в тестах.
+os.environ.update(
+    {
+        "SECRET_KEY": "test-secret",
+        "AUTH_USERS": "admin:admin123",
+        "OPNSENSE_ENABLED": "",
+        "OPNSENSE_SHAPER_ENABLED": "",
+        "DHCP_POOL": "",
+        "AD_DOMAIN": "",
+        "DEBUG": "",
+        "SESSION_COOKIE_SECURE": "",
+    }
+)
 
 from app import create_app  # noqa: E402
 

@@ -5,9 +5,10 @@
 
 import logging
 
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, render_template, request
 from requests import RequestException
 
+from app.api.factories import get_printer_client
 from app.api.printer_client import PrinterMonitorClient
 from app.utils import sort_items
 
@@ -21,15 +22,6 @@ SORT_FIELDS: dict[str, str] = {
     "toner": "toner_percentage_value",
     "print_count": "print_count",
 }
-
-
-def _get_client() -> PrinterMonitorClient:
-    """Создать клиент Printer Monitor API.
-
-    Returns:
-        Экземпляр клиента.
-    """
-    return PrinterMonitorClient(current_app.config["PRINTER_API_URL"])
 
 
 def _get_toner_threshold(client: PrinterMonitorClient) -> int:
@@ -49,7 +41,7 @@ def printers_list() -> str:
     Returns:
         HTML-шаблон со списком принтеров.
     """
-    client = _get_client()
+    client = get_printer_client()
     unavailable_services = []
     try:
         printers = client.get_printers()
@@ -73,7 +65,7 @@ def htmx_printers_list() -> str:
     Returns:
         HTML-фрагмент со списком принтеров.
     """
-    client = _get_client()
+    client = get_printer_client()
     unavailable_services: list[str] = []
     sort_by = request.args.get("sort", "")
     order = request.args.get("order", "asc")
@@ -106,7 +98,7 @@ def check_printers() -> str:
     Returns:
         HTML-фрагмент с результатом проверки.
     """
-    client = _get_client()
+    client = get_printer_client()
     try:
         result = client.check_printers()
     except RequestException as e:

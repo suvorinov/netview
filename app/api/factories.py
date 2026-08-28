@@ -55,8 +55,17 @@ def get_host_client() -> HostMonitorClient:
 
 
 def get_logspy_client() -> LogSpyClient:
-    """Клиент LogSpy API."""
-    return _cached_client("logspy", "LOGSPY_API_URL", LogSpyClient)
+    """Клиент LogSpy API.
+
+    Таймаут настраивается отдельно (LOGSPY_TIMEOUT): запрос сведений
+    о пользователе может быть тяжёлым и не укладываться в общий дефолт.
+    """
+    if "logspy" not in current_app.extensions.setdefault(_CACHE_KEY, {}):
+        current_app.extensions[_CACHE_KEY]["logspy"] = LogSpyClient(
+            current_app.config["LOGSPY_API_URL"],
+            timeout=int(current_app.config.get("LOGSPY_TIMEOUT", 60)),
+        )
+    return current_app.extensions[_CACHE_KEY]["logspy"]
 
 
 def get_netcerber_client() -> NetCerberClient:

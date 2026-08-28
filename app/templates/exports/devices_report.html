@@ -16,6 +16,7 @@
   .flag { display: inline-block; background: #fef3c7; border: 1px solid #f59e0b;
           border-radius: 4px; padding: 0 4px; margin: 1px 2px 1px 0; font-size: 11px;
           white-space: nowrap; }
+  .flag.blocked { background: #fee2e2; border-color: #dc2626; color: #b91c1c; }
 </style>
 </head>
 <body>
@@ -54,6 +55,7 @@
         {% if flags.new %}<span class="flag">Новое (7 дн.)</span>{% endif %}
         {% if flags.unknown %}<span class="flag">Неизвестное</span>{% endif %}
         {% if flags.dhcp %}<span class="flag">DHCP-пул</span>{% endif %}
+        {% if flags.blocked %}<span class="flag blocked">Заблокировано на шлюзе</span>{% endif %}
       </td>
     </tr>
   {% endfor %}

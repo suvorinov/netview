@@ -7,7 +7,7 @@
 import logging
 from datetime import UTC, datetime
 
-from flask import Flask, redirect, request, url_for
+from flask import Flask, redirect, render_template, request, url_for
 from flask_login import current_user
 from flask_wtf import CSRFProtect
 
@@ -16,7 +16,7 @@ from app.config import Config
 from app.routes.dashboard import dashboard_bp
 from app.routes.hosts import hosts_bp
 from app.routes.logs import logs_bp
-from app.routes.netcerber import netcerber_bp
+from app.routes.netcerber import _opnsense_problems, netcerber_bp
 from app.routes.printers import printers_bp
 from app.routes.settings import settings_bp
 from app.routes.stoplist import stoplist_bp
@@ -46,6 +46,16 @@ def create_app(config_class=Config) -> Flask:
         )
     if not config_class.AUTH_USERS:
         logger.warning("AUTH_USERS не задан — вход в систему будет невозможен")
+
+    # Fail-fast конфигурации OPNsense-блокировки: проблемы видны в логе
+    # сразу при старте, а не при первом открытии модалки устройства.
+    os_issues = _opnsense_problems(app.config)
+    if os_issues:
+        logger.warning(
+            "OPNsense-блокировка включена, но настроена не полностью: %s. "
+            "Кнопки блокировки будут скрыты до исправления конфигурации.",
+            "; ".join(os_issues),
+        )
 
     @app.template_filter("datetime")
     def _format_datetime(value):
@@ -99,6 +109,22 @@ def create_app(config_class=Config) -> Flask:
 
     login_manager.init_app(app)
     CSRFProtect(app)
+
+    @app.errorhandler(500)
+    def internal_error(_error):
+        """Страница внутренней ошибки в общем стиле панели.
+
+        Непойманное исключение (например, неожиданная форма ответа
+        сервиса) не должно показывать дефолтную серую страницу Werkzeug.
+        Traceback при этом логируется самим Flask — здесь только рендер.
+        Фолбэк на простой текст: если сломался сам шаблон или контекст,
+        пользователь всё равно получит осмысленный ответ.
+        """
+        try:
+            return render_template("errors/500.html"), 500
+        except Exception:
+            logger.exception("Не удалось отрендерить errors/500.html")
+            return "Внутренняя ошибка сервера", 500
 
     @app.before_request
     def require_login():

@@ -1,0 +1,67 @@
+<div class="p-6">
+    <div class="text-center mb-5">
+        {% if success %}
+        <i class="fas fa-shield-halved text-{{ 'green' if action == 'block' else 'blue' }}-500 text-4xl mb-2"></i>
+        <h3 class="text-lg font-semibold">{{ mac }}</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+            {% if action == 'block' %}
+                Заблокировано на шлюзе (по MAC)
+            {% else %}
+                Разблокировано на шлюзе
+            {% endif %}
+        </p>
+        {% else %}
+        <i class="fas fa-triangle-exclamation text-orange-500 text-4xl mb-2"></i>
+        <h3 class="text-lg font-semibold">{{ mac }}</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Ошибка выполнения — см. ниже</p>
+        {% endif %}
+    </div>
+
+    <div class="space-y-1 mb-6 text-sm">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 py-1.5">
+            <span class="font-mono text-gray-600 dark:text-gray-300">шлюз (по MAC)</span>
+            {% if success %}
+            <span class="text-green-600 dark:text-green-400">
+                <i class="fas fa-check-circle mr-1"></i>{{ detail }}
+            </span>
+            {% else %}
+            <span class="text-red-600 dark:text-red-400" title="{{ detail }}">
+                <i class="fas fa-exclamation-circle mr-1"></i>{{ detail }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="flex gap-2">
+        {% if action == 'block' and success %}
+        <form hx-post="/netcerber/htmx/os-unblock/{{ device_id }}"
+              hx-target="#device-modal-content"
+              hx-swap="innerHTML"
+              hx-confirm="Снять блокировку {{ mac }} на шлюзе?"
+              class="flex-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="mac" value="{{ mac }}">
+            {% include "partials/_netcerber_filters_hidden.html" %}
+            <button type="submit" hx-disabled-elt="this"
+                    class="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm">
+                <i class="fas fa-unlock mr-1"></i> Разблокировать на шлюзе
+            </button>
+            <div class="htmx-indicator text-sm text-gray-500 dark:text-gray-400 text-center mt-2">
+                <i class="fas fa-spinner fa-spin mr-1"></i>Снимаю блокировку на шлюзе…
+            </div>
+        </form>
+        {% endif %}
+        <button onclick="document.getElementById('device-modal').classList.add('hidden')"
+                class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-sm flex-1">
+            Закрыть
+        </button>
+    </div>
+</div>
+
+{% if success %}
+<!-- Список перерисовывается в фоне: бейдж «Заблокировано» и счётчики
+     показывают актуальное состояние шлюза сразу, без перезагрузки -->
+<div id="device-list" hx-swap-oob="true">
+    {% include "partials/_netcerber_device_list.html" %}
+</div>
+{% endif %}

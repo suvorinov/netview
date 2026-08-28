@@ -14,6 +14,20 @@ from app.api.netcerber_client import NetCerberClient
 from app.api.printer_client import PrinterMonitorClient
 
 
+def _iso(*, days=0, hours=0):
+    """ISO-дата относительно текущего момента: тесты не должны стареть.
+
+    Флаг «Новое» в панели живёт 7 дней от first_seen — жёсткие даты в
+    фикстурах со временем выходили из окна и роняли тесты.
+    """
+    from datetime import datetime, timedelta
+
+    return (
+        datetime.now() - timedelta(days=days, hours=hours)
+    ).isoformat(timespec="seconds")
+
+
+
 @pytest.fixture(autouse=True)
 def mock_api_clients(monkeypatch):
     """Подменить все HTTP-клиенты статичными ответами."""
@@ -177,7 +191,7 @@ def _netcerber_devices_fixture():
                 "hostname": "Неизвестное устройство",
                 "vendor": "TP-LINK TECHNOLOGIES CO.,LTD.",
                 "mac_address": "aa:bb:cc:dd:ee:01",
-                "first_seen": "2026-08-19T09:00:00",
+                "first_seen": _iso(days=1),
                 "is_authorized": False,
             },
             {
@@ -186,7 +200,7 @@ def _netcerber_devices_fixture():
                 "hostname": "zr-pc-01.zr.local",
                 "vendor": "ASUSTek COMPUTER INC.",
                 "mac_address": "aa:bb:cc:dd:ee:02",
-                "first_seen": "2026-06-01T09:00:00",
+                "first_seen": _iso(days=90),
                 "is_authorized": False,
             },
             {
@@ -195,7 +209,7 @@ def _netcerber_devices_fixture():
                 "hostname": "zr-printer-01.zr.local",
                 "vendor": "KYOCERA Display Corporation",
                 "mac_address": "aa:bb:cc:dd:ee:03",
-                "first_seen": "2026-08-19T09:00:00",
+                "first_seen": _iso(days=1),
                 "is_authorized": False,
             },
             {
@@ -204,7 +218,7 @@ def _netcerber_devices_fixture():
                 "hostname": "zr-pc-02.zr.local",
                 "vendor": "MSI",
                 "mac_address": "aa:bb:cc:dd:ee:04",
-                "first_seen": "2026-06-01T09:00:00",
+                "first_seen": _iso(days=90),
                 "is_authorized": False,
             },
         ],
@@ -259,6 +273,49 @@ def test_netcerber_active_chip_highlighted(logged_client, monkeypatch):
     idx_router = html.index('hx-get="/netcerber/htmx/list?cat=router"')
     assert "bg-blue-600 text-white" in html[idx_new - 300:idx_new + 100]
     assert "bg-blue-600 text-white" not in html[idx_router - 300:idx_router + 100]
+
+
+def test_netcerber_list_shows_blocked_badge(app, logged_client, monkeypatch):
+    """Устройство, заблокированное на шлюзе, помечается бейджем в списке.
+
+    Блокировка вычисляется один раз на весь список (набор hex-MAC), а не
+    запросом на каждое устройство.
+    """
+    from app.api.netcerber_client import NetCerberClient
+    from app.routes import netcerber as netcerber_routes
+
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices",
+        lambda self, **kwargs: _netcerber_devices_fixture(),
+    )
+    # Заблокирован только роутер TP-LINK (aa:bb:cc:dd:ee:01 -> AABBCCDDEE01)
+    monkeypatch.setattr(
+        netcerber_routes,
+        "_opnsense_blocked_macs",
+        lambda: {"AABBCCDDEE01"},
+    )
+
+    html = logged_client.get("/netcerber/htmx/list").get_data(as_text=True)
+    assert html.count("> Заблокировано") == 1
+    # Бейдж появляется только у устройства с заблокированным MAC (TP-LINK)
+    # — других красных shield-бейджей блокировки в списке нет.
+
+
+def test_netcerber_list_no_badge_when_opnsense_off(
+    logged_client, monkeypatch
+):
+    """OPNsense выключен/недоступен — бейдж блокировки не выводится."""
+    from app.api.netcerber_client import NetCerberClient
+    from app.routes import netcerber as netcerber_routes
+
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices",
+        lambda self, **kwargs: _netcerber_devices_fixture(),
+    )
+    monkeypatch.setattr(netcerber_routes, "_opnsense_blocked_macs", lambda: set())
+
+    html = logged_client.get("/netcerber/htmx/list").get_data(as_text=True)
+    assert "> Заблокировано" not in html
 
 
 def test_netcerber_alerts_panel(logged_client, monkeypatch):
@@ -340,6 +397,26 @@ def test_netcerber_export_html(logged_client, monkeypatch):
     assert "Не авторизовано" in html
     # Сортировка по IP: .100 идёт раньше .201 независимо от порядка выборки
     assert html.index("192.168.0.100") < html.index("192.168.0.201")
+
+
+def test_netcerber_export_shows_blocked_badge(app, logged_client, monkeypatch):
+    """Печатный отчёт помечает устройство, заблокированное на шлюзе."""
+    from app.api.netcerber_client import NetCerberClient
+    from app.routes import netcerber as netcerber_routes
+
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices",
+        lambda self, **kwargs: _netcerber_devices_fixture(),
+    )
+    # Заблокирован роутер TP-LINK (aa:bb:cc:dd:ee:01 -> AABBCCDDEE01)
+    monkeypatch.setattr(
+        netcerber_routes, "_opnsense_blocked_macs", lambda: {"AABBCCDDEE01"}
+    )
+
+    html = logged_client.get("/netcerber/export").get_data(as_text=True)
+    assert "Заблокировано на шлюзе" in html
+    # Ровно один бейдж — у заблокированного TP-LINK (.201)
+    assert html.count("Заблокировано на шлюзе") == 1
 
 
 def test_user_blocked_export_html(logged_client, monkeypatch):
@@ -516,6 +593,682 @@ def test_netcerber_authorize_updates_list(logged_client):
     assert "Деавторизовать" in html
 
 
+def test_netcerber_delete_device_shows_confirmation_and_updates_list(
+    logged_client, monkeypatch
+):
+    """Удаление из модалки: подтверждение + обновлённый список (hx-swap-oob)."""
+    deleted = []
+
+    def fake_delete(self, device_id):
+        deleted.append(device_id)
+        return {}
+
+    monkeypatch.setattr(NetCerberClient, "delete_device", fake_delete)
+    resp = logged_client.post(
+        "/netcerber/htmx/delete/7",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+
+    assert deleted == [7]
+    html = resp.get_data(as_text=True)
+    assert "Запись удалена" in html
+    assert 'id="device-list" hx-swap-oob="true"' in html
+
+
+def test_netcerber_delete_device_unavailable(logged_client, monkeypatch):
+    """Недоступный NetCerber при удалении — сообщение об ошибке."""
+    import requests as requests_lib
+
+    def boom(self, device_id):
+        raise requests_lib.ConnectionError("NetCerber down")
+
+    monkeypatch.setattr(NetCerberClient, "delete_device", boom)
+    resp = logged_client.post(
+        "/netcerber/htmx/delete/7",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+
+    assert "Не удалось удалить" in resp.get_data(as_text=True)
+
+
+def test_netcerber_mismatch_badge_replaces_router_badge(logged_client, monkeypatch):
+    """Роутерный вендор с разрешённым hostname → «Вендор ≠ hostname»,
+    а не уверенное «Сетевое оборудование?» (кейс IP .37 после DHCP-блока).
+    Неразрешённый hostname по-прежнему даёт роутер-бейдж."""
+    devices = {
+        "items": [
+            {
+                "id": 1,
+                "ip_address": "192.168.0.37",
+                "mac_address": "AA:BB:CC:DD:EE:01",
+                "hostname": "zr-37",
+                "vendor": "TP-LINK TECHNOLOGIES CO.,LTD.",
+                "is_authorized": True,
+                "first_seen": _iso(days=1),
+                "last_seen": _iso(hours=3),
+            },
+            {
+                "id": 2,
+                "ip_address": "192.168.0.50",
+                "mac_address": "AA:BB:CC:DD:EE:02",
+                "hostname": "",
+                "vendor": "TP-LINK TECHNOLOGIES CO.,LTD.",
+                "is_authorized": False,
+                "first_seen": _iso(days=1),
+                "last_seen": _iso(hours=3),
+            },
+        ],
+        "total": 2,
+    }
+    monkeypatch.setattr(NetCerberClient, "get_devices", lambda self, **kw: devices)
+
+    html = logged_client.get("/netcerber/").get_data(as_text=True)
+
+    # Для zr-37 — расхождение, для безымянного — прежний роутер-бейдж
+    assert "Вендор ≠ hostname" in html
+    assert 'title="Вендор производит сетевое оборудование' in html
+    # Чип новой категории со счётчиком
+    assert "Расхождение данных (1)" in html
+
+
+# ── Блокировка устройств на шлюзе (OPNsense / TING) ────────────
+
+_BLOCK_DEVICE = {
+    "id": 9,
+    "ip_address": "192.168.0.77",
+    "mac_address": "aa-bb-cc-dd-ee-99",
+    "hostname": "rogue-device",
+    "vendor": "Xiaomi Communications",
+    "is_authorized": False,
+}
+
+
+def _enable_opnsense(app):
+    """Включить шлюзную (OPNsense) блокировку в конфиге тестового приложения."""
+    from app.config import Config as _Config
+
+    assert hasattr(_Config, "OPNSENSE_ENABLED")
+    app.config.update(
+        OPNSENSE_ENABLED=True,
+        OPNSENSE_URL="http://192.168.0.1",
+        OPNSENSE_KEY="key",
+        OPNSENSE_SECRET="secret",
+        OPNSENSE_TIMEOUT=5,
+    )
+
+
+def test_os_block_device_success(app, logged_client, monkeypatch):
+    """Блокировка на шлюзе выполняется по MAC устройства (через алиас)."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_opnsense(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    called = {}
+
+    def fake_block(self, mac):
+        called["mac"] = mac
+        return "шлюз: правило по MAC — трафик отсечён"
+
+    monkeypatch.setattr(OPNsenseClient, "block_mac", fake_block)
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-block/9",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+    html = resp.get_data(as_text=True)
+
+    assert called == {"mac": "AA:BB:CC:DD:EE:99"}
+    assert "Заблокировано на шлюзе" in html
+    assert "Разблокировать на шлюзе" in html
+
+
+def test_os_block_refreshes_list_with_badge(app, logged_client, monkeypatch):
+    """После успешной блокировки список перерисовывается oob с бейджем.
+
+    Устройство #9 (AA:BB:CC:DD:EE:99) — ровно одно соответствие в списке;
+    бейдж «Заблокировано» появляется в обновлённом фрагменте #device-list.
+    """
+    from app.api.opnsense import OPNsenseClient
+    from app.routes import netcerber as netcerber_routes
+
+    _enable_opnsense(app)
+    monkeypatch.setattr(
+        NetCerberClient, "get_device",
+        lambda self, device_id: dict(_BLOCK_DEVICE),
+    )
+    monkeypatch.setattr(
+        OPNsenseClient, "block_mac",
+        lambda self, mac: "шлюз: правило по MAC — трафик отсечён",
+    )
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices",
+        lambda self, **kwargs: {
+            "total": 1,
+            "items": [dict(_BLOCK_DEVICE)],
+        },
+    )
+    # Шлюз считаем заблокированным для этого MAC
+    monkeypatch.setattr(
+        netcerber_routes, "_opnsense_blocked_macs",
+        lambda: {"AABBCCDDEE99"},
+    )
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-block/9",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+    html = resp.get_data(as_text=True)
+
+    # oob-фрагмент списка присутствует и содержит бейдж блокировки
+    assert 'id="device-list" hx-swap-oob="true"' in html
+    assert "> Заблокировано" in html
+
+
+def test_os_block_failure_keeps_list_unchanged(app, logged_client, monkeypatch):
+    """При ошибке блокировки oob-фрагмент списка не выводится."""
+    from app.api.opnsense import OPNsenseClient, OPNsenseError
+
+    _enable_opnsense(app)
+    monkeypatch.setattr(
+        NetCerberClient, "get_device",
+        lambda self, device_id: dict(_BLOCK_DEVICE),
+    )
+    monkeypatch.setattr(
+        OPNsenseClient, "block_mac",
+        lambda self, mac: (_ for _ in ()).throw(
+            OPNsenseError("gateway rejected")
+        ),
+    )
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-block/9",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+    html = resp.get_data(as_text=True)
+    assert "Ошибка выполнения" in html
+    assert 'id="device-list" hx-swap-oob="true"' not in html
+
+
+def test_os_block_device_protected_mac_rejected(app, logged_client, monkeypatch):
+    """Защищённый MAC не блокируется на шлюзе ни при каких условиях."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_opnsense(app)
+    app.config["OPNSENSE_PROTECTED_MACS"] = "AA-BB-CC-DD-EE-99"
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    monkeypatch.setattr(
+        OPNsenseClient,
+        "block_mac",
+        lambda self, mac: pytest.fail("block_mac не должен вызываться"),
+    )
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-block/9",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+    assert "списке защищённых" in resp.get_data(as_text=True)
+
+
+def test_os_block_device_disabled(app, logged_client, monkeypatch):
+    """Шлюзная блокировка выключена — понятное сообщение."""
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-block/9",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+
+    assert "OPNsense отключена" in resp.get_data(as_text=True)
+
+
+def test_os_unblock_device_success(app, logged_client, monkeypatch):
+    """Разблокировка на шлюзе идёт по MAC (переживает смену IP)."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_opnsense(app)
+
+    def broken_get(self, device_id):
+        import requests as requests_lib
+
+        raise requests_lib.ConnectionError("NetCerber down")
+
+    monkeypatch.setattr(NetCerberClient, "get_device", broken_get)
+    calls = []
+
+    def fake_unblock(self, mac):
+        calls.append(mac)
+        return "шлюз: правила блокировки сняты"
+
+    monkeypatch.setattr(OPNsenseClient, "unblock_mac", fake_unblock)
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-unblock/9",
+        data={
+            "csrf_token": _csrf_token(logged_client),
+            "mac": "AA:BB:CC:DD:EE:99",
+        },
+    )
+    html = resp.get_data(as_text=True)
+
+    assert calls == ["AA:BB:CC:DD:EE:99"]
+    assert "Разблокировано на шлюзе" in html
+
+
+def test_os_block_works_without_ip(app, logged_client, monkeypatch):
+    """MAC-блокировка не зависит от IP: правило ссылается на алиас MAC."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_opnsense(app)
+    nodata = dict(_BLOCK_DEVICE, ip_address="")
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: nodata)
+    called = {}
+
+    def fake_block(self, mac):
+        called["mac"] = mac
+        return "шлюз: правило по MAC — трафик отсечён"
+
+    monkeypatch.setattr(OPNsenseClient, "block_mac", fake_block)
+
+    resp = logged_client.post(
+        "/netcerber/htmx/os-block/9",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+
+    assert called == {"mac": "AA:BB:CC:DD:EE:99"}
+    assert "Заблокировано на шлюзе" in resp.get_data(as_text=True)
+
+
+# ── Ограничение скорости на шлюзе (Traffic Shaper) ─────────────
+
+def _enable_shaper(app):
+    """Включить шейпер в тестовом конфиге (креды те же, что у блокировки)."""
+    from app.config import Config as _Config
+
+    assert hasattr(_Config, "OPNSENSE_SHAPER_ENABLED")
+    app.config.update(
+        OPNSENSE_SHAPER_ENABLED=True,
+        OPNSENSE_URL="http://192.168.0.1",
+        OPNSENSE_KEY="key",
+        OPNSENSE_SECRET="secret",
+        OPNSENSE_TIMEOUT=5,
+    )
+
+
+def _shaper_channel(uid, name):
+    return {"uuid": uid, "name": name, "bandwidth": "5", "metric": "Mbit/s"}
+
+
+def _shaped_rule(mac_hex, target, ip):
+    return {
+        "uuid": "shape-rule-1",
+        "description": f"netview-shape-{mac_hex}",
+        "enabled": True,
+        "sequence": "90",
+        "target_uuid": target,
+        "destinations": [ip],
+    }
+
+
+def test_shaper_apply_device_success(app, logged_client, monkeypatch):
+    """Применение канала: правило отдано клиенту, модалка перерисована."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_shaper(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    monkeypatch.setattr(OPNsenseClient, "shaper_pipe_name", lambda self, uid: "5Mbit")
+    calls = {}
+
+    def fake_apply(self, mac, ip, uid):
+        calls.update(mac=mac, ip=ip, uid=uid)
+        return "шлюз: канал установлен (MAC AA:BB:CC:DD:EE:99)"
+
+    monkeypatch.setattr(OPNsenseClient, "shaper_apply", fake_apply)
+    monkeypatch.setattr(OPNsenseClient, "shaper_pipes", lambda self: [_shaper_channel("pipe-a", "5Mbit")])
+    monkeypatch.setattr(
+        OPNsenseClient, "shaper_device_status",
+        lambda self, mac: _shaped_rule("AABBCCDDEE99", "pipe-a", "192.168.0.77"),
+    )
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-apply/9",
+        data={
+            "csrf_token": _csrf_token(logged_client),
+            "mac": "AA:BB:CC:DD:EE:99",
+            "channel": "pipe-a",
+        },
+    )
+    html = resp.get_data(as_text=True)
+
+    assert calls == {"mac": "AA:BB:CC:DD:EE:99", "ip": "192.168.0.77", "uid": "pipe-a"}
+    assert "Ограничение скорости (канал)" in html
+    assert "5Mbit" in html  # применённый канал в статусе
+    assert 'value="pipe-a" selected' in html  # канал выбран в селекте
+
+
+def test_shaper_apply_device_disabled(app, logged_client, monkeypatch):
+    """Шейпер выключен — понятное сообщение вместо операции."""
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-apply/9",
+        data={
+            "csrf_token": _csrf_token(logged_client),
+            "mac": "AA:BB:CC:DD:EE:99",
+            "channel": "pipe-a",
+        },
+    )
+
+    assert "Шейпер отключён" in resp.get_data(as_text=True)
+
+
+def test_shaper_apply_missing_channel(app, logged_client, monkeypatch):
+    """Канал обязателен: без него — предупреждение, без запросов к шлюзу."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_shaper(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    monkeypatch.setattr(OPNsenseClient, "shaper_apply",
+                        lambda self, mac, ip, uid: pytest.fail("apply не должен вызываться"))
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-apply/9",
+        data={"csrf_token": _csrf_token(logged_client), "mac": "AA:BB:CC:DD:EE:99"},
+    )
+
+    assert "Не выбран канал" in resp.get_data(as_text=True)
+
+
+def test_shaper_apply_requires_ip(app, logged_client, monkeypatch):
+    """Шейпер матчит по IP: устройство без IP канал не получит."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_shaper(app)
+    nodata = dict(_BLOCK_DEVICE, ip_address="")
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: nodata)
+    monkeypatch.setattr(OPNsenseClient, "shaper_apply",
+                        lambda self, mac, ip, uid: pytest.fail("apply не должен вызываться"))
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-apply/9",
+        data={
+            "csrf_token": _csrf_token(logged_client),
+            "mac": "AA:BB:CC:DD:EE:99",
+            "channel": "pipe-a",
+        },
+    )
+
+    assert "нет IP-адреса" in resp.get_data(as_text=True)
+
+
+def test_shaper_apply_unknown_channel(app, logged_client, monkeypatch):
+    """Оператор выбрал канал, которого нет на шлюзе — отказ."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_shaper(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    monkeypatch.setattr(OPNsenseClient, "shaper_pipe_name", lambda self, uid: None)
+    monkeypatch.setattr(OPNsenseClient, "shaper_apply",
+                        lambda self, mac, ip, uid: pytest.fail("apply не должен вызываться"))
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-apply/9",
+        data={
+            "csrf_token": _csrf_token(logged_client),
+            "mac": "AA:BB:CC:DD:EE:99",
+            "channel": "no-such-pipe",
+        },
+    )
+
+    assert "канал не найден на шлюзе" in resp.get_data(as_text=True)
+
+
+def test_shaper_apply_failure(app, logged_client, monkeypatch):
+    """Сбой клиента — сообщение об ошибке, модалка закрыта."""
+    from app.api.opnsense import OPNsenseClient, OPNsenseError
+
+    _enable_shaper(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    monkeypatch.setattr(OPNsenseClient, "shaper_pipe_name", lambda self, uid: "5Mbit")
+    monkeypatch.setattr(
+        OPNsenseClient, "shaper_apply",
+        lambda self, mac, ip, uid: (_ for _ in ()).throw(OPNsenseError("gateway rejected")),
+    )
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-apply/9",
+        data={
+            "csrf_token": _csrf_token(logged_client),
+            "mac": "AA:BB:CC:DD:EE:99",
+            "channel": "pipe-a",
+        },
+    )
+
+    assert "не удалось применить канал" in resp.get_data(as_text=True)
+
+
+def test_shaper_clear_device_success(app, logged_client, monkeypatch):
+    """Снятие ограничения: правило удалено, кнопка «Снять» исчезает."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_shaper(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    calls = []
+    monkeypatch.setattr(
+        OPNsenseClient, "shaper_clear",
+        lambda self, mac: calls.append(mac) or "шлюз: ограничение скорости снято",
+    )
+    monkeypatch.setattr(OPNsenseClient, "shaper_pipes", lambda self: [_shaper_channel("pipe-a", "5Mbit")])
+    monkeypatch.setattr(OPNsenseClient, "shaper_device_status", lambda self, mac: None)
+
+    resp = logged_client.post(
+        "/netcerber/htmx/shaper-clear/9",
+        data={"csrf_token": _csrf_token(logged_client), "mac": "AA:BB:CC:DD:EE:99"},
+    )
+    html = resp.get_data(as_text=True)
+
+    assert calls == ["AA:BB:CC:DD:EE:99"]
+    assert "Ограничение скорости (канал)" in html
+    assert "Снять ограничение" not in html  # канал снят — действия нет
+
+
+def test_shaper_card_shows_channels_and_current(app, logged_client, monkeypatch):
+    """Карточка: селект каналов и текущий ограничивающий канал."""
+    from app.api.opnsense import OPNsenseClient
+
+    _enable_shaper(app)
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+    monkeypatch.setattr(
+        OPNsenseClient, "shaper_pipes",
+        lambda self: [_shaper_channel("pipe-a", "5Mbit"), _shaper_channel("pipe-b", "10Mbit")],
+    )
+    monkeypatch.setattr(
+        OPNsenseClient, "shaper_device_status",
+        lambda self, mac: _shaped_rule("AABBCCDDEE99", "pipe-b", "192.168.0.77"),
+    )
+
+    resp = logged_client.get("/netcerber/htmx/device/9")
+    html = resp.get_data(as_text=True)
+
+    assert "Ограничение скорости (канал)" in html
+    assert 'value="pipe-a"' in html and 'value="pipe-b" selected' in html
+    assert "10Mbit" in html
+
+
+def test_shaper_card_hidden_when_disabled(logged_client, monkeypatch):
+    """Шейпер выключен — блок про канал в карточке отсутствует."""
+    monkeypatch.setattr(NetCerberClient, "get_device", lambda self, device_id: dict(_BLOCK_DEVICE))
+
+    resp = logged_client.get("/netcerber/htmx/device/9")
+
+    assert "Ограничение скорости (канал)" not in resp.get_data(as_text=True)
+
+
+def test_ad_resolve_404_is_not_an_error(logged_client, monkeypatch, caplog):
+    """404 от LogSpy (IP вне AD) — штатный ответ: None без шума в журнале."""
+    import requests as requests_lib
+
+    def not_found(self, ip_address):
+        resp = requests_lib.Response()
+        resp.status_code = 404
+        raise requests_lib.HTTPError("404 Not Found", response=resp)
+
+    monkeypatch.setattr(LogSpyClient, "ad_resolve_ip", not_found)
+
+    with caplog.at_level("INFO", logger="app.routes.netcerber"):
+        device = {
+            "id": 5,
+            "ip_address": "192.168.0.66",
+            "mac_address": "AA:BB:CC:DD:EE:66",
+            "hostname": "",
+            "vendor": "",
+            "is_authorized": False,
+        }
+        monkeypatch.setattr(NetCerberClient, "get_device", lambda self, did: device)
+        logged_client.get("/netcerber/htmx/device/5")
+
+    # Ни строчки про ошибку resolve; страница рендерится с модалкой
+    assert "LogSpy AD resolve" not in caplog.text
+
+
+# ── Дубли по IP: группировка, история, чистка ────────────────
+
+_DUPES_DEVICES = {
+    "items": [
+        {   # Устаревшая запись: прежний владелец IP (роутер из инцидента)
+            "id": 1,
+            "ip_address": "192.168.0.37",
+            "mac_address": "AA:BB:CC:00:00:01",
+            "hostname": "",
+            "vendor": "TP-LINK TECHNOLOGIES CO.,LTD.",
+            "is_authorized": False,
+            "last_seen": _iso(hours=4),
+            "first_seen": _iso(days=5),
+        },
+        {   # Свежайшая запись этого IP (текущий хост)
+            "id": 2,
+            "ip_address": "192.168.0.37",
+            "mac_address": "AA:BB:CC:00:00:02",
+            "hostname": "zr-37",
+            "vendor": "Gigabyte Technology",
+            "is_authorized": True,
+            "last_seen": _iso(hours=1),
+            "first_seen": _iso(hours=2),
+        },
+    ],
+    "total": 2,
+}
+
+
+def _dupes_payload() -> dict:
+    """Свежие копии записей на каждый вызов, как реальный ответ API.
+
+    Важно для честности тестов: группировка навешивает "_history" на
+    сами объекты записей, и общий мок между вызовами маскировал баг
+    потери истории при рендере.
+    """
+    return {
+        "items": [dict(d) for d in _DUPES_DEVICES["items"]],
+        "total": len(_DUPES_DEVICES["items"]),
+    }
+
+
+def test_netcerber_dedupes_by_ip_by_default(logged_client, monkeypatch):
+    """По умолчанию показывается одна свежайшая запись IP с бейджем ×N."""
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices", lambda self, **kw: _dupes_payload()
+    )
+    html = logged_client.get("/netcerber/").get_data(as_text=True)
+
+    # Первичная строка одна, история скрыта
+    assert html.count("zr-37") == 1
+    assert "×2 записей" in html
+    # Чип со счётчиком дублей
+    assert "Дубли по IP (1)" in html
+
+
+def test_netcerber_dupes_show_renders_history(logged_client, monkeypatch):
+    """dupes=1 разворачивает устаревшие записи тусклыми строками."""
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices", lambda self, **kw: _dupes_payload()
+    )
+    html = logged_client.get("/netcerber/?dupes=1").get_data(as_text=True)
+
+    assert "устаревшая запись" in html
+    # MAC устаревшей записи: в строке истории и в тултипе бейджа ×N
+    assert html.count("AA:BB:CC:00:00:01") == 2
+    assert "Скрыть историю IP" in html
+
+
+def test_netcerber_cleanup_duplicates_keeps_freshest(
+    logged_client, monkeypatch
+):
+    """Чистка удаляет только устаревшие записи указанного IP."""
+    deleted = []
+    # Мок с изменяемым состоянием: delete реально убирает запись,
+    # чтобы последующая выборка в ответе это отразила
+    data = {"items": [dict(d) for d in _DUPES_DEVICES["items"]], "total": 2}
+
+    def fake_get(self, **kw):
+        return data
+
+    def fake_delete(self, device_id):
+        deleted.append(device_id)
+        data["items"] = [d for d in data["items"] if d["id"] != device_id]
+        data["total"] = len(data["items"])
+        return {}
+
+    monkeypatch.setattr(NetCerberClient, "get_devices", fake_get)
+    monkeypatch.setattr(NetCerberClient, "delete_device", fake_delete)
+
+    resp = logged_client.post(
+        "/netcerber/htmx/cleanup-duplicates?ip=192.168.0.37&sort=ip&order=asc",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+
+    assert deleted == [1]  # свежайшая (id=2) не тронута
+    html = resp.get_data(as_text=True)
+    # Список в ответе уже без бейджа дублей
+    assert "×2 записей" not in html
+    assert "AA:BB:CC:00:00:02" in html
+
+
+def test_netcerber_cleanup_duplicates_idempotent(logged_client, monkeypatch):
+    """Повторная чистка (дублей уже нет) не падает и обновляет список."""
+    monkeypatch.setattr(NetCerberClient, "get_devices", lambda self, **kw: {"items": [], "total": 0})
+    monkeypatch.setattr(
+        NetCerberClient, "delete_device",
+        lambda self, device_id: pytest.fail("удалять нечего"),
+    )
+
+    resp = logged_client.post(
+        "/netcerber/htmx/cleanup-duplicates?ip=192.168.0.37",
+        data={"csrf_token": _csrf_token(logged_client)},
+    )
+
+    assert resp.status_code == 200
+
+
+def test_netcerber_broom_only_on_primary_rows(logged_client, monkeypatch):
+    """Метёлка чистки — только у первичной записи с историей.
+
+    Устаревшие строки (dupes=1) рисуются без кнопок действий.
+    Регрессия: pop("_history") в _load_devices лишал шаблон данных,
+    и бейдж ×N с метёлкой не рендерились вовсе (в тестах это
+    маскировалось общим состоянием мока между вызовами).
+    """
+    monkeypatch.setattr(
+        NetCerberClient, "get_devices", lambda self, **kw: _dupes_payload()
+    )
+
+    show_html = logged_client.get("/netcerber/?dupes=1").get_data(as_text=True)
+    assert "устаревшая запись" in show_html          # история развёрнута
+    assert show_html.count("fa-broom") == 1          # одна группа → одна метёлка
+
+    hide_html = logged_client.get("/netcerber/").get_data(as_text=True)
+    assert "×2 записей" in hide_html                 # бейдж на первичной
+    assert hide_html.count("fa-broom") == 1
+
+
 def test_netcerber_authorize_all_updates_list(logged_client):
     """«Авторизовать все» обновляет список в фоне."""
     resp = logged_client.post(
@@ -579,7 +1332,7 @@ def test_netcerber_dhcp_no_load_more_under_filter(app, logged_client, monkeypatc
                     "hostname": f"zr-pc-{i}.zr.local",
                     "vendor": "MSI",
                     "mac_address": f"aa:bb:cc:dd:ee:{i:02x}",
-                    "first_seen": "2026-06-01T09:00:00",
+                    "first_seen": _iso(days=90),
                     "is_authorized": False,
                 }
                 for i in range(1, 151)
@@ -675,6 +1428,47 @@ def test_404_page():
     do_login(client)
     response = client.get("/nonexistent")
     assert response.status_code == 404
+
+
+# ── Обработчик 500 ───────────────────────────────────────────
+
+
+def _raise_runtime_error(self):
+    raise RuntimeError("неожиданная форма ответа сервиса")
+
+
+def test_500_renders_custom_page(app, logged_client, monkeypatch):
+    """Непойманное исключение — страница errors/500.html, а не дефолт Werkzeug.
+
+    В тестах Flask по умолчанию пробрасывает исключения наружу
+    (PROPAGATE_EXCEPTIONS наследует TESTING); для проверки обработчика
+    проброс отключается — как в рабочем режиме.
+    """
+    monkeypatch.setattr(PrinterMonitorClient, "get_printers", _raise_runtime_error)
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+
+    response = logged_client.get("/printers/")
+
+    assert response.status_code == 500
+    html = response.get_data(as_text=True)
+    assert "Что-то пошло не так" in html
+    assert "На главную" in html
+
+
+def test_500_fallback_when_template_breaks(app, logged_client, monkeypatch):
+    """Если не рендерится сам шаблон ошибки — простой текстовый ответ 500."""
+
+    def broken_template(*args, **kwargs):
+        raise RuntimeError("шаблон недоступен")
+
+    monkeypatch.setattr(PrinterMonitorClient, "get_printers", _raise_runtime_error)
+    monkeypatch.setattr("app.render_template", broken_template)
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+
+    response = logged_client.get("/printers/")
+
+    assert response.status_code == 500
+    assert "Внутренняя ошибка сервера" in response.get_data(as_text=True)
 
 
 # ── Журнал сканирований NetCerber ────────────────────────────
@@ -943,6 +1737,55 @@ def test_users_computers_tab(logged_client, monkeypatch):
 def test_users_tab_switch_links(logged_client):
     html = logged_client.get("/users/").get_data(as_text=True)
     assert '/users/?view=computers' in html
+
+
+def test_users_list_has_logs_spinner(logged_client, monkeypatch):
+    """Список пользователей показывает оверлей «Просматриваю логи…»
+    при клике по строке (долгий запрос к LogSpy на странице пользователя)."""
+    from app.api.logspy_client import LogSpyClient
+
+    monkeypatch.setattr(
+        LogSpyClient, "get_ad_users",
+        lambda self, **kwargs: [
+            {
+                "sAMAccountName": "Valentin.Gorohov",
+                "displayName": "Валентин Горохов",
+                "department": "ИТ",
+                "title": "Админ",
+                "ou": "OU=Users",
+                "mail": "v.gorohov@zr.local",
+                "telephoneNumber": "123",
+                "enabled": True,
+            }
+        ],
+    )
+    html = logged_client.get("/users/").get_data(as_text=True)
+    assert 'id="logs-spinner"' in html
+    assert "Просматриваю логи…" in html
+    assert 'id="user-detail-container"' in html
+    # Список оборачивается в отдельный контейнер, который скрывается
+    # при открытии пользователя (под деталью не остаётся списка)
+    assert 'id="user-list-view"' in html
+    # Строки пользователей грузят фрагмент через HTMX в контейнер
+    assert 'hx-target="#user-detail-container"' in html
+    assert 'hx-get="/users/Valentin.Gorohov"' in html
+    assert 'hx-push-url="/users/Valentin.Gorohov"' in html
+    assert "function showSpinner" in html
+
+
+def test_user_detail_htmx_returns_fragment(logged_client):
+    """HTMX-запрос возвращает фрагмент без базовой обёртки страницы.
+
+    Фрагмент вставляется в #user-detail-container на странице списка,
+    поэтому не должен содержать полноценный <html> (только контент).
+    """
+    html = logged_client.get(
+        "/users/Valentin.Gorohov", headers={"HX-Request": "true"}
+    ).get_data(as_text=True)
+    assert "<!DOCTYPE html>" not in html
+    assert "<html" not in html
+    # контент фрагмента на месте
+    assert "Заблокированные запросы" in html or "Все запросы" in html
 
 
 # ── Валидация настроек Printer Monitor ────────────────────────

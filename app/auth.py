@@ -13,6 +13,8 @@ pbkdf2-хеша werkzeug — тогда запись выглядит так:
 
 import hmac
 import logging
+import threading
+import time
 
 from flask import (
     Blueprint,
@@ -35,6 +37,17 @@ login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = "Войдите, чтобы продолжить"
 login_manager.login_message_category = "info"
+
+# Защита от перебора паролей: не более _LOGIN_MAX_FAILURES неудачных
+# попыток за окно _LOGIN_WINDOW_SECONDS с одного IP. Скользящее окно
+# вместо паузы в обработчике: запрос отклоняется сразу и не удерживает
+# поток сервера. Счётчики живут в памяти процесса и сбрасываются при
+# перезапуске — для внутренней панели этого достаточно. Lock нужен:
+# Flask обрабатывает запросы в нескольких потоках.
+_LOGIN_MAX_FAILURES = 5
+_LOGIN_WINDOW_SECONDS = 60.0
+_login_failures: dict[str, list[float]] = {}
+_login_lock = threading.Lock()
 
 
 class User(UserMixin):
@@ -89,6 +102,39 @@ def _has_configured_users() -> bool:
     return bool(_parse_users())
 
 
+def _client_key() -> str:
+    """Ключ лимита попыток: IP клиента (или заглушка, если его нет)."""
+    return request.remote_addr or "unknown"
+
+
+def _register_failure(key: str) -> bool:
+    """Записать неудачную попытку входа с ключа key.
+
+    Args:
+        key: Идентификатор источника попыток (IP).
+
+    Returns:
+        True, если лимит попыток за окно превышен — вход нужно
+        отклонить сообщением о блокировке, не проверяя пароль
+        (иначе блокировка не мешает перебору).
+    """
+    now = time.monotonic()
+    with _login_lock:
+        recent = [
+            ts for ts in _login_failures.get(key, [])
+            if now - ts < _LOGIN_WINDOW_SECONDS
+        ]
+        recent.append(now)
+        _login_failures[key] = recent
+        return len(recent) > _LOGIN_MAX_FAILURES
+
+
+def _reset_failures(key: str) -> None:
+    """Успешный вход сбрасывает счётчик неудачных попыток."""
+    with _login_lock:
+        _login_failures.pop(key, None)
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     """Страница входа и обработчик формы.
@@ -109,19 +155,30 @@ def login():
         else:
             users = _parse_users()
             stored = users.get(username)
-            if stored and _verify_password(password, stored):
+            ip_key = _client_key()
+            if _register_failure(ip_key):
+                logger.warning(
+                    "Превышен лимит попыток входа (IP %s): %s", ip_key, username
+                )
+                flash(
+                    "Слишком много неудачных попыток. Попробуйте через минуту",
+                    "error",
+                )
+            elif stored and _verify_password(password, stored):
+                _reset_failures(ip_key)
                 # Сброс старой сессии перед входом — защита от session
                 # fixation: злоумышленник не может подсунуть жертве
                 # заранее известный идентификатор сессии.
                 session.clear()
                 login_user(User(username))
-                logger.info("Вход: %s", username)
+                logger.info("Вход: %s (IP %s)", username, ip_key)
                 next_url = request.args.get("next")
                 if next_url and next_url.startswith("/") and not next_url.startswith("//"):
                     return redirect(next_url)
                 return redirect(url_for("dashboard.index"))
-            logger.warning("Неудачный вход: %s", username)
-            flash("Неверное имя пользователя или пароль", "error")
+            else:
+                logger.warning("Неудачный вход (IP %s): %s", ip_key, username)
+                flash("Неверное имя пользователя или пароль", "error")
 
     return render_template("auth/login.html")
 

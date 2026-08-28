@@ -1,0 +1,18 @@
+<div class="p-6 text-center">
+    <i class="fas fa-trash-alt text-green-500 text-4xl mb-3"></i>
+    <h3 class="text-lg font-semibold mb-1">Запись удалена</h3>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">
+        Устройство удалено из базы NetCerber. Следующее сканирование создаст
+        запись заново — с актуальными MAC, вендором и hostname.
+    </p>
+    <button onclick="document.getElementById('device-modal').classList.add('hidden')"
+            class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-sm">
+        Закрыть
+    </button>
+</div>
+{% if oob %}
+<!-- Список, счётчик, табы и чипы обновляются в фоне: записи устройства там уже нет -->
+<div id="device-list" hx-swap-oob="true">
+    {% include "partials/_netcerber_device_list.html" %}
+</div>
+{% endif %}

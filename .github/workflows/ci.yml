@@ -24,3 +24,13 @@ jobs:
 
       - name: Тесты (pytest)
         run: pytest tests/ -q
+
+      - name: Проверка CSS (пересборка должна быть закоммичена)
+        run: |
+          curl -sL https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 -o tailwindcss
+          chmod +x tailwindcss
+          ./tailwindcss -c tailwind.config.js -i app/static/css/tailwind.input.css -o /tmp/app-check.css --minify
+          if ! diff -q /tmp/app-check.css app/static/css/app.css >/dev/null; then
+            echo "::error::app/static/css/app.css устарел: шаблоны менялись без 'make css'"
+            exit 1
+          fi

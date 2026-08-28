@@ -146,25 +146,26 @@ function replaceAll(e) {
 }
 
 function removeWord(word) {
-    if (!confirm(`Удалить "${word}" из стоп-листа?`)) return;
-
-    fetch('/stoplist/remove', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': csrfToken
-        },
-        body: 'word=' + encodeURIComponent(word)
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.remaining !== undefined) {
-            location.reload();
-        } else {
-            alert(data.error || 'Ошибка удаления');
-        }
-    })
-    .catch(err => alert('Ошибка сети'));
+    // Кастомный диалог вместо системного confirm()
+    appConfirm.show(`Удалить "${word}" из стоп-листа?`, () => {
+        fetch('/stoplist/remove', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrfToken
+            },
+            body: 'word=' + encodeURIComponent(word)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.remaining !== undefined) {
+                location.reload();
+            } else {
+                appNotify(data.error || 'Ошибка удаления', true);
+            }
+        })
+        .catch(err => appNotify('Ошибка сети', true));
+    });
 }
 </script>
 {% endblock %}

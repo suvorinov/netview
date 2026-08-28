@@ -3,12 +3,17 @@
 from datetime import UTC, datetime, timedelta
 
 from app.utils import (
+    group_devices_by_ip,
     human_size,
     is_in_dhcp_pool,
     is_new_device,
+    is_protected_mac,
     is_router_vendor,
     is_unknown_device,
+    is_vendor_mismatch,
+    normalize_mac,
     parse_dhcp_pool,
+    parse_mac_list,
     sort_items,
 )
 
@@ -121,6 +126,141 @@ def test_router_vendor_other():
 
 def test_router_vendor_none():
     assert not is_router_vendor(None)
+
+
+# ── is_vendor_mismatch ───────────────────────────────────────
+
+
+def test_mismatch_router_vendor_with_known_hostname():
+    """Роутерный вендор + разрешённое имя ПК = рассинхрон записи
+    (кейс: DHCP выдал адрес роутера Windows-хосту zr-37)."""
+    assert is_vendor_mismatch("TP-LINK TECHNOLOGIES CO.,LTD.", True)
+    assert is_vendor_mismatch("D-Link Corporation", True)
+
+
+def test_mismatch_router_vendor_unknown_hostname_is_not_mismatch():
+    """Неразрешённый hostname у роутерного вендора — норма, это просто роутер."""
+    assert not is_vendor_mismatch("TP-LINK TECHNOLOGIES CO.,LTD.", False)
+    assert not is_vendor_mismatch("MikroTik", False)
+
+
+def test_mismatch_asustek_never():
+    """ASUSTek + разрешённое имя — обычный ПК с платой ASUS, не конфликт."""
+    assert not is_vendor_mismatch("ASUSTek COMPUTER INC.", True)
+    assert not is_vendor_mismatch("ASUSTek COMPUTER INC.", False)
+
+
+def test_mismatch_other_vendors():
+    assert not is_vendor_mismatch("Intel Corporate", True)
+    assert not is_vendor_mismatch("", True)
+    assert not is_vendor_mismatch(None, True)
+
+
+# ── normalize_mac / parse_mac_list / is_protected_mac ────────
+
+
+def test_normalize_mac_formats():
+    assert normalize_mac("aabbccddeeff") == "AA:BB:CC:DD:EE:FF"
+    assert normalize_mac("AA-BB-CC-DD-EE-FF") == "AA:BB:CC:DD:EE:FF"
+    assert normalize_mac("aa:bb:cc:dd:ee:ff") == "AA:BB:CC:DD:EE:FF"
+
+
+def test_normalize_mac_invalid():
+    assert normalize_mac("") is None
+    assert normalize_mac(None) is None
+    assert normalize_mac("zz:zz:zz:zz:zz:zz") is None
+    assert normalize_mac("AA:BB:CC:DD:EE") is None
+
+
+def test_parse_mac_list():
+    macs = parse_mac_list(" aa-bb-cc-dd-ee-01 , AABBCCDDEE02, мусор, aa:bb:cc:dd:ee:01 ")
+    assert macs == ("AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02")
+
+
+def test_is_protected_mac():
+    protected = parse_mac_list("AA:BB:CC:DD:EE:FF")
+    assert is_protected_mac("aabbccddeeff", protected)
+    assert not is_protected_mac("11:22:33:44:55:66", protected)
+    assert not is_protected_mac(None, protected)
+    # Строка конфига напрямую тоже допустима
+    assert is_protected_mac("AA:BB:CC:DD:EE:FF", "AA-BB-CC-DD-EE-FF")
+
+
+# ── group_devices_by_ip ──────────────────────────────────────
+
+
+def _dev(id_, ip, mac, last_seen):
+    return {
+        "id": id_,
+        "ip_address": ip,
+        "mac_address": mac,
+        "hostname": f"host-{id_}",
+        "last_seen": last_seen,
+        "first_seen": "2026-08-01T00:00:00",
+    }
+
+
+def test_group_keeps_freshest_per_ip():
+    devices = [
+        _dev(1, "192.168.0.37", "AA", "2026-08-20T10:00:00"),
+        _dev(2, "192.168.0.37", "BB", "2026-08-24T09:00:00"),
+        _dev(3, "192.168.0.50", "CC", "2026-08-23T09:00:00"),
+    ]
+    groups = group_devices_by_ip(devices)
+
+    assert len(groups) == 2
+    fresh = next(g for g in groups if g["ip_address"] == "192.168.0.37")
+    assert fresh["mac_address"] == "BB"  # свежайшая запись — первичная
+    assert [h["mac_address"] for h in fresh["_history"]] == ["AA"]
+
+
+def test_group_history_sorted_newest_first():
+    devices = [
+        _dev(1, "10.0.0.1", "AA", "2026-08-10T00:00:00"),
+        _dev(2, "10.0.0.1", "BB", "2026-08-22T00:00:00"),
+        _dev(3, "10.0.0.1", "CC", "2026-08-15T00:00:00"),
+    ]
+    primary = group_devices_by_ip(devices)[0]
+
+    assert primary["mac_address"] == "BB"
+    assert [h["mac_address"] for h in primary["_history"]] == ["CC", "AA"]
+
+
+def test_group_tie_broken_by_id():
+    """Равные last_seen: свежее та запись, что создана позже (больше id)."""
+    devices = [
+        _dev(7, "10.0.0.5", "AA", "2026-08-24T00:00:00"),
+        _dev(9, "10.0.0.5", "BB", "2026-08-24T00:00:00"),
+    ]
+    primary = group_devices_by_ip(devices)[0]
+    assert primary["mac_address"] == "BB"
+    assert [h["mac_address"] for h in primary["_history"]] == ["AA"]
+
+
+def test_group_single_records_untouched():
+    devices = [_dev(1, "10.0.0.9", "AA", "2026-08-24T00:00:00")]
+    groups = group_devices_by_ip(devices)
+    assert len(groups) == 1
+    assert "_history" not in groups[0]
+
+
+def test_group_missing_last_seen_falls_back_to_first_seen():
+    d_old = _dev(1, "10.0.0.9", "AA", "")
+    d_old["first_seen"] = "2026-08-02T00:00:00"
+    d_new = _dev(2, "10.0.0.9", "BB", "")
+    d_new["first_seen"] = "2026-08-20T00:00:00"
+    primary = group_devices_by_ip([d_old, d_new])[0]
+    assert primary["mac_address"] == "BB"
+
+
+def test_group_input_order_preserved():
+    devices = [
+        _dev(1, "10.0.0.30", "AA", "2026-08-24T00:00:00"),
+        _dev(2, "10.0.0.20", "BB", "2026-08-24T00:00:00"),
+        _dev(3, "10.0.0.30", "CC", "2026-08-25T00:00:00"),
+    ]
+    ips = [g["ip_address"] for g in group_devices_by_ip(devices)]
+    assert ips == ["10.0.0.30", "10.0.0.20"]
 
 
 # ── is_unknown_device ────────────────────────────────────────
