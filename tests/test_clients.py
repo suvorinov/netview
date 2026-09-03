@@ -59,6 +59,30 @@ def test_logspy_client_timeout_from_config():
         assert get_logspy_client().timeout == 60
 
 
+def test_all_clients_timeout_from_config():
+    """Каждый клиент получает таймаут из своей env-переменной."""
+    from app import create_app
+    from app.api.factories import (
+        get_host_client,
+        get_netcerber_client,
+        get_printer_client,
+    )
+
+    app = create_app()
+    app.config.update(
+        PRINTER_API_URL="http://p.test",
+        HOST_API_URL="http://h.test",
+        NETCERBER_API_URL="http://n.test",
+        PRINTER_TIMEOUT=42,
+        HOST_TIMEOUT=7,
+        NETCERBER_TIMEOUT=3,
+    )
+    with app.app_context():
+        assert get_printer_client().timeout == 42
+        assert get_host_client().timeout == 7
+        assert get_netcerber_client().timeout == 3
+
+
 class TestBaseApiClient:
     """Контракты базового клиента: успех и классы ошибок."""
 

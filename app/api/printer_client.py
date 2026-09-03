@@ -11,7 +11,7 @@ from app.api.base import BaseApiClient
 class PrinterMonitorClient(BaseApiClient):
     """Клиент для работы с Printer Monitor API."""
 
-    def __init__(self, base_url: str, timeout: int = 20) -> None:
+    def __init__(self, base_url: str, timeout: int = 60) -> None:
         super().__init__(base_url, timeout)
 
     def get_printers(self) -> list[dict[str, Any]]:

@@ -4,9 +4,49 @@
 форматирование размеров и сортировка списков словарей.
 """
 
+import logging
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+def run_in_parallel(
+    tasks: dict[str, Callable[[], Any]],
+    service: str = "сервис",
+) -> dict[str, Any]:
+    """Выполнить независимые запросы параллельно, вернуть {имя: результат}.
+
+    Страница делает несколько запросов к сервису; последовательно на
+    медленном/недоступном сервисе это сумма таймаутов, параллельно —
+    один таймаут. Запросы I/O-bound и отпускают GIL, поэтому
+    ThreadPoolExecutor ускоряет, не упираясь в GIL.
+
+    Args:
+        tasks: {имя задачи: функция запроса}. Имя попадает в лог ошибки.
+        service: Имя сервиса для сообщения в логе (для читаемости).
+
+    Returns:
+        {имя задачи: результат}. При сетевой ошибке (RequestException)
+        значение None, ошибка зарегистрирована. Ошибки формы данных
+        НЕ глушатся — наш баг должен падать громко.
+    """
+    results: dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as pool:
+        futures = {pool.submit(fn): name for name, fn in tasks.items()}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                results[name] = future.result()
+            except requests.RequestException as e:
+                logger.error("%s API (%s) error: %s", service, name, e)
+                results[name] = None
+    return results
 
 
 def human_size(b: Any) -> str:

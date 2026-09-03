@@ -46,6 +46,12 @@ login_manager.login_message_category = "info"
 # Flask обрабатывает запросы в нескольких потоках.
 _LOGIN_MAX_FAILURES = 5
 _LOGIN_WINDOW_SECONDS = 60.0
+# Верхняя граница записей в словаре. Защита от неограниченного роста
+# памяти на долгоживущем сервере: чистка старых записей происходит при
+# каждом обращении, но если за окно набралось слишком много уникальных
+# IP (например, PRTG/агенты проверяют login по фальшивым паролям),
+# лишние записи отбрасываются — лимит всего защищает от перебора.
+_LOGIN_MAX_KEYS = 10_000
 _login_failures: dict[str, list[float]] = {}
 _login_lock = threading.Lock()
 
@@ -120,10 +126,28 @@ def _register_failure(key: str) -> bool:
     """
     now = time.monotonic()
     with _login_lock:
-        recent = [
-            ts for ts in _login_failures.get(key, [])
-            if now - ts < _LOGIN_WINDOW_SECONDS
+        # Устаревшие записи не нужно хранить вечно: если с ключа больше
+        # не ходят, его попытки не влияют на лимит. Удаляем ключи, чьи
+        # попытки целиком старше окна — не даёт словарю незаметно расти.
+        expired = [
+            k for k, stamps in _login_failures.items()
+            if not stamps or now - stamps[-1] >= _LOGIN_WINDOW_SECONDS
         ]
+        for k in expired:
+            _login_failures.pop(k, None)
+        # Жёсткая страховка от взрывного роста при массовом переборе
+        # с множества IP (боевой сценарий): если ключей стало слишком
+        # много, отбрасываем старейшие, пока не останется место под
+        # текущий ключ и словарь не вернётся под лимит.
+        if len(_login_failures) >= _LOGIN_MAX_KEYS:
+            excess = len(_login_failures) - _LOGIN_MAX_KEYS + 1
+            if excess > 0:
+                oldest = sorted(_login_failures, key=lambda k: _login_failures[k][-1])
+                for k in oldest[:excess]:
+                    _login_failures.pop(k, None)
+
+        recent = _login_failures.get(key, [])
+        recent = [ts for ts in recent if now - ts < _LOGIN_WINDOW_SECONDS]
         recent.append(now)
         _login_failures[key] = recent
         return len(recent) > _LOGIN_MAX_FAILURES

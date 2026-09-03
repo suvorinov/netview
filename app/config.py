@@ -97,12 +97,19 @@ class Config:
     PRINTER_API_URL = os.environ.get("PRINTER_API_URL", "http://localhost:8101")
     HOST_API_URL = os.environ.get("HOST_API_URL", "http://localhost:8102")
     LOGSPY_API_URL = os.environ.get("LOGSPY_API_URL", "http://localhost:8103")
-    # Таймаут запросов к LogSpy. По умолчанию 60 с: запрос сведений о
-    # пользователе (/api/v1/data) парсит большой лог-файл и на медленной
-    # машине может отвечать дольше 15 с. Настраивается через LOGSPY_TIMEOUT.
-    LOGSPY_TIMEOUT = float(os.environ.get("LOGSPY_TIMEOUT", "60"))
     NETCERBER_API_URL = os.environ.get("NETCERBER_API_URL", "http://localhost:8104")
     AD_DOMAIN = os.environ.get("AD_DOMAIN", "")
+
+    # Таймауты запросов к сервисам, секунды. Единый формат для всех
+    # клиентов: каждый настраивается отдельной переменной, чтоб не менять
+    # код под специфику одного сервиса. Дефолт каждого — его естественное
+    # значение (см. конструкторы клиентов). LogSpy по умолчанию 60 с:
+    # запрос сведений о пользователе (/api/v1/data) парсит большой
+    # лог-файл и на медленной машине может отвечать дольше 15 с.
+    PRINTER_TIMEOUT = float(os.environ.get("PRINTER_TIMEOUT", "60"))
+    HOST_TIMEOUT = float(os.environ.get("HOST_TIMEOUT", "10"))
+    LOGSPY_TIMEOUT = float(os.environ.get("LOGSPY_TIMEOUT", "60"))
+    NETCERBER_TIMEOUT = float(os.environ.get("NETCERBER_TIMEOUT", "15"))
 
     # Диапазон DHCP-пула в формате "192.168.0.31,192.168.0.199".
     # Используется как признак "устройство в DHCP-пуле" в NetCerber.

@@ -1227,7 +1227,8 @@ def htmx_trigger_scan():
     last_scan = None
     try:
         scan_status = client.scan_status()
-        last_scan = client.get_scans(limit=1).get("items", [])[0]
+        scans = client.get_scans(limit=1).get("items", [])
+        last_scan = scans[0] if scans else None
     except RequestException as e:
         logger.error("NetCerber API (scan status) error: %s", e)
     return render_template(

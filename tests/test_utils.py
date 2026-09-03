@@ -14,6 +14,7 @@ from app.utils import (
     normalize_mac,
     parse_dhcp_pool,
     parse_mac_list,
+    run_in_parallel,
     sort_items,
 )
 
@@ -357,3 +358,37 @@ def test_time_ago_naive_string(app):
     time_ago = app.jinja_env.filters["time_ago"]
     recent = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
     assert time_ago(recent) == "только что"
+
+
+# ── run_in_parallel ──────────────────────────────────────────
+
+
+def test_run_in_parallel_returns_all_results():
+    results = run_in_parallel({
+        "a": lambda: 1,
+        "b": lambda: "two",
+    })
+    assert results == {"a": 1, "b": "two"}
+
+
+def test_run_in_parallel_swallows_request_exception():
+    """Сетевой сбой (RequestException) даёт None, не роняет вызов."""
+    import requests
+
+    def boom():
+        raise requests.ConnectionError("refused")
+
+    results = run_in_parallel({"ok": lambda: 1, "bad": boom}, service="Test")
+    assert results["ok"] == 1
+    assert results["bad"] is None
+
+
+def test_run_in_parallel_propagates_non_network_error():
+    """Ошибка формы данных — наш баг — должна падать громко, не глушиться."""
+    import pytest
+
+    def bug():
+        raise ValueError("broken shape")
+
+    with pytest.raises(ValueError):
+        run_in_parallel({"bad": bug}, service="Test")

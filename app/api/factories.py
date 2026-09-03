@@ -24,7 +24,12 @@ from app.api.printer_client import PrinterMonitorClient
 _CACHE_KEY = "api_clients"
 
 
-def _cached_client(key: str, config_key: str, client_cls: Callable[..., Any]) -> Any:
+def _cached_client(
+    key: str,
+    config_key: str,
+    client_cls: Callable[..., Any],
+    timeout_key: str | None = None,
+) -> Any:
     """Получить клиента из кэша приложения или создать и закэшировать.
 
     Кэш хранится в current_app.extensions — у каждого экземпляра
@@ -34,24 +39,33 @@ def _cached_client(key: str, config_key: str, client_cls: Callable[..., Any]) ->
         key: Ключ клиента в кэше ("printer", "host", ...).
         config_key: Имя переменной конфигурации с URL сервиса.
         client_cls: Класс клиента.
+        timeout_key: Имя переменной конфигурации с таймаутом (сек.).
+            Если не задан — таймаут клиента из его конструктора.
 
     Returns:
         Экземпляр клиента для текущего приложения.
     """
     clients = current_app.extensions.setdefault(_CACHE_KEY, {})
     if key not in clients:
-        clients[key] = client_cls(current_app.config[config_key])
+        kwargs: dict[str, Any] = {}
+        if timeout_key:
+            kwargs["timeout"] = int(current_app.config.get(timeout_key, 15))
+        clients[key] = client_cls(current_app.config[config_key], **kwargs)
     return clients[key]
 
 
 def get_printer_client() -> PrinterMonitorClient:
     """Клиент Printer Monitor API."""
-    return _cached_client("printer", "PRINTER_API_URL", PrinterMonitorClient)
+    return _cached_client(
+        "printer", "PRINTER_API_URL", PrinterMonitorClient, "PRINTER_TIMEOUT"
+    )
 
 
 def get_host_client() -> HostMonitorClient:
     """Клиент Host Monitor API."""
-    return _cached_client("host", "HOST_API_URL", HostMonitorClient)
+    return _cached_client(
+        "host", "HOST_API_URL", HostMonitorClient, "HOST_TIMEOUT"
+    )
 
 
 def get_logspy_client() -> LogSpyClient:
@@ -60,14 +74,13 @@ def get_logspy_client() -> LogSpyClient:
     Таймаут настраивается отдельно (LOGSPY_TIMEOUT): запрос сведений
     о пользователе может быть тяжёлым и не укладываться в общий дефолт.
     """
-    if "logspy" not in current_app.extensions.setdefault(_CACHE_KEY, {}):
-        current_app.extensions[_CACHE_KEY]["logspy"] = LogSpyClient(
-            current_app.config["LOGSPY_API_URL"],
-            timeout=int(current_app.config.get("LOGSPY_TIMEOUT", 60)),
-        )
-    return current_app.extensions[_CACHE_KEY]["logspy"]
+    return _cached_client(
+        "logspy", "LOGSPY_API_URL", LogSpyClient, "LOGSPY_TIMEOUT"
+    )
 
 
 def get_netcerber_client() -> NetCerberClient:
     """Клиент NetCerber API."""
-    return _cached_client("netcerber", "NETCERBER_API_URL", NetCerberClient)
+    return _cached_client(
+        "netcerber", "NETCERBER_API_URL", NetCerberClient, "NETCERBER_TIMEOUT"
+    )

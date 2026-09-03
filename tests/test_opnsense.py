@@ -17,6 +17,7 @@ moveRuleBefore отсутствуют; setItem требует alias[name]; со�
 """
 
 import pytest
+import requests
 
 from app.api.opnsense import (
     ALIAS_NAME,
@@ -607,3 +608,66 @@ def test_shaper_apply_raises_when_reconfigure_fails():
     c = _client(s)
     with pytest.raises(OPNsenseError, match="применение шейпера"):
         c.shaper_apply(MAC, IP, PIPE_1M)
+
+
+# ── повторы при транзиентных сетевых сбоях ──────────────────────
+
+class _RetrySession(_FakeSession):
+    """Сессия, у которой первые N запросов к указанным URL падают сетевым сбоем.
+
+    Обычный requests.ConnectionError, а не OPNsenseError: только так
+    `_retry_transient` решает, что сбой транзиентный и стоит повторить.
+    Нужно про две вещи: (а) сбой случается k раз — `fail_count`,
+    после чего сессия отвечает обычными responses; (б) мы видим число
+    попыток через self.calls.
+    """
+
+    def __init__(self, fail_urls, fail_count=1):
+        super().__init__()
+        self.fail_urls = fail_urls   # url → сколько первых раз падать
+        self._fails = dict(fail_urls)
+
+    def _handle(self, method, url, data):
+        self.calls.append((method, url, data))
+        # Сначала исчерпываем «отказные» попытки для этого url.
+        remaining = self._fails.get(url, 0)
+        if remaining > 0:
+            self._fails[url] = remaining - 1
+            raise requests.ConnectionError(f"refused: {url}")
+        val = self.responses.get(url)
+        if val is None:
+            raise OPNsenseError(f"неожиданный URL: {url}")
+        payload = val[0] if isinstance(val, tuple) else val
+        return _FakeResp(payload, 200)
+
+
+def test_get_retries_once_on_transient_connection_error():
+    """Сетевой сбой на чтении (searchItem) повторяется один раз и успешен."""
+    fail = _RetrySession({f"{ALIAS}/searchItem": 1})
+    fail.responses[f"{BASE}/searchRule"] = _rule_rows(_block_rule_row())
+    fail.responses[f"{BASE}/getRule/{RULE_UUID}"] = (_get_rule_payload(), 200)
+    # searchItem сначала упадёт, повторится и вернёт содержимое алиаса.
+    fail.responses[f"{ALIAS}/searchItem"] = _alias_rows(MAC_CANON)
+    c = _client(fail)
+
+    assert c.is_blocked(MAC) is True
+
+    # searchItem вызван дважды: один раз упал сетевым сбоем, второй прошёл.
+    seen = [url for _, url, _ in fail.calls if url == f"{ALIAS}/searchItem"]
+    assert len(seen) == 2
+
+
+def test_retry_stops_after_max_attempts():
+    """При стойком сетевом сбое после повторов поднимается OPNsenseError."""
+    always = _RetrySession({f"{ALIAS}/searchItem": 99})
+    always.responses[f"{BASE}/searchRule"] = _rule_rows(_block_rule_row())
+    always.responses[f"{BASE}/getRule/{RULE_UUID}"] = (_get_rule_payload(), 200)
+    # searchItem всегда падает сетевым сбоем (даже после повтора).
+    always.responses[f"{ALIAS}/searchItem"] = _alias_rows(MAC_CANON)
+    c = _client(always)
+
+    with pytest.raises(OPNsenseError):
+        c.is_blocked(MAC)
+    # 1 исходный запрос + 1 повтор (OPNSENSE_RETRIES) обращений к searchItem.
+    seen = [url for _, url, _ in always.calls if url == f"{ALIAS}/searchItem"]
+    assert len(seen) == 2

@@ -5,7 +5,6 @@
 
 import logging
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from flask import Blueprint, render_template
@@ -17,7 +16,12 @@ from app.api.factories import (
     get_netcerber_client,
     get_printer_client,
 )
-from app.utils import is_new_device, is_router_vendor, is_unknown_device
+from app.utils import (
+    is_new_device,
+    is_router_vendor,
+    is_unknown_device,
+    run_in_parallel,
+)
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -28,30 +32,6 @@ CRITICAL_PERCENT = 80
 
 # Значения по умолчанию при недоступности сервисов
 EMPTY_HOST_STATS = {"total": 0, "online": 0, "offline": 0, "avg_cpu": 0}
-
-
-def _run_task(
-    name: str,
-    fn: Callable[[], Any],
-    default: Any,
-    service: str,
-) -> tuple[Any, str | None]:
-    """Выполнить запрос к сервису.
-
-    Args:
-        name: Имя задачи (для лога).
-        fn: Функция запроса.
-        default: Значение при ошибке.
-        service: Имя сервиса (для баннера недоступности).
-
-    Returns:
-        (результат, None) при успехе или (default, service) при ошибке.
-    """
-    try:
-        return fn(), None
-    except RequestException as e:
-        logger.error("%s API (%s) error: %s", service, name, e)
-        return default, service
 
 
 def _has_toner(p: dict[str, Any]) -> bool:
@@ -102,47 +82,58 @@ def index() -> str:
 
     # Независимые запросы выполняем параллельно, чтобы страница не ждала
     # каждый сервис по очереди (при недоступном сервисе — до 20 секунд).
-    tasks: dict[str, tuple[Callable[[], Any], Any, str]] = {
-        "printers": (printer_client.get_printers, [], "Printer Monitor"),
-        "threshold": (printer_client.get_threshold, {}, "Printer Monitor"),
-        "host_stats": (host_client.get_stats, EMPTY_HOST_STATS, "Host Monitor"),
-        "hosts": (
-            lambda: host_client.get_hosts(page=1, limit=500),
-            {}, "Host Monitor",
-        ),
-        "ad_stats": (logspy_client.get_ad_stats, {}, "LogSpy"),
-        "logs": (logspy_client.get_logs, [], "LogSpy"),
-        "stoplist": (logspy_client.get_stoplist, {}, "LogSpy"),
-        "netcerber_devices": (
-            lambda: netcerber_client.get_devices(limit=500),
-            {}, "NetCerber",
-        ),
-        "netcerber_alerts": (
-            lambda: netcerber_client.get_alerts(limit=1),
-            {}, "NetCerber",
-        ),
-        "netcerber_stats": (
-            netcerber_client.get_stats,
-            {}, "NetCerber",
-        ),
+    task_fns: dict[str, Callable[[], Any]] = {
+        "printers": printer_client.get_printers,
+        "threshold": printer_client.get_threshold,
+        "host_stats": host_client.get_stats,
+        "hosts": lambda: host_client.get_hosts(page=1, limit=500),
+        "ad_stats": logspy_client.get_ad_stats,
+        "logs": logspy_client.get_logs,
+        "stoplist": logspy_client.get_stoplist,
+        "netcerber_devices": lambda: netcerber_client.get_devices(limit=500),
+        "netcerber_alerts": lambda: netcerber_client.get_alerts(limit=1),
+        "netcerber_stats": netcerber_client.get_stats,
+    }
+    # Сервис-владелец каждой задачи — для баннера недоступности.
+    task_service = {
+        "printers": "Printer Monitor",
+        "threshold": "Printer Monitor",
+        "host_stats": "Host Monitor",
+        "hosts": "Host Monitor",
+        "ad_stats": "LogSpy",
+        "logs": "LogSpy",
+        "stoplist": "LogSpy",
+        "netcerber_devices": "NetCerber",
+        "netcerber_alerts": "NetCerber",
+        "netcerber_stats": "NetCerber",
+    }
+    # Значение-заглушка для каждой задачи при недоступном сервисе.
+    task_defaults: dict[str, Any] = {
+        "printers": [],
+        "threshold": {},
+        "host_stats": EMPTY_HOST_STATS,
+        "hosts": {},
+        "ad_stats": {},
+        "logs": [],
+        "stoplist": {},
+        "netcerber_devices": {},
+        "netcerber_alerts": {},
+        "netcerber_stats": {},
     }
 
-    results: dict[str, Any] = {}
-    unavailable: set[str] = set()
-    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-        futures = {
-            pool.submit(_run_task, name, fn, default, service): name
-            for name, (fn, default, service) in tasks.items()
-        }
-        for future in as_completed(futures):
-            name = futures[future]
-            results[name], failed_service = future.result()
-            if failed_service:
-                unavailable.add(failed_service)
+    results = run_in_parallel(task_fns, service="Dashboard")
+    unavailable = {
+        task_service[name]
+        for name, value in results.items() if value is None
+    }
+    data = {
+        name: (value if value is not None else task_defaults[name])
+        for name, value in results.items()
+    }
 
-    printers = results["printers"]
+    printers = data["printers"]
     printer_count = len(printers)
-    toner_threshold = results["threshold"].get("threshold", 20)
+    toner_threshold = data["threshold"].get("threshold", 20)
     low_toner = sum(
         1 for p in printers
         if _has_toner(p)
@@ -150,19 +141,19 @@ def index() -> str:
     )
     critical_printers = _critical_printers(printers, toner_threshold)
 
-    host_stats = results["host_stats"]
+    host_stats = data["host_stats"]
     host_count = host_stats.get("total", 0)
     hosts_online = host_stats.get("online", 0)
     hosts_offline = host_stats.get("offline", 0)
-    critical_hosts = _critical_hosts(results["hosts"].get("items", []))
+    critical_hosts = _critical_hosts(data["hosts"].get("items", []))
 
-    ad_stats = results["ad_stats"]
+    ad_stats = data["ad_stats"]
     ad_users_count = ad_stats.get("enabled_users", 0)
     ad_computers_count = ad_stats.get("total_computers", 0)
     ad_sync_status = ad_stats.get("sync_status", "not_started")
 
     # Summary зависит от списка логов — выполняется после параллельного блока.
-    log_files = results["logs"]
+    log_files = data["logs"]
     blocked_count = 0
     total_requests = 0
     unique_users = 0
@@ -181,10 +172,10 @@ def index() -> str:
                 total_requests += item.get("total_visits", 0)
             unique_users = len(ip_summary)
 
-    stoplist_count = results["stoplist"].get("total", 0)
+    stoplist_count = data["stoplist"].get("total", 0)
 
     # NetCerber: счётчики подозрительных устройств и топ новых.
-    nc_devices = results["netcerber_devices"].get("items", [])
+    nc_devices = data["netcerber_devices"].get("items", [])
     nc_router = 0
     nc_unknown = 0
     nc_new: list[dict[str, Any]] = []
@@ -197,8 +188,8 @@ def index() -> str:
         if is_new_device(d):
             nc_new.append(d)
     nc_new.sort(key=lambda d: d.get("first_seen") or "", reverse=True)
-    nc_alerts_total = results["netcerber_alerts"].get("total", 0)
-    nc_stats = results["netcerber_stats"]
+    nc_alerts_total = data["netcerber_alerts"].get("total", 0)
+    nc_stats = data["netcerber_stats"]
     nc_total_devices = nc_stats.get("total_devices", 0)
     nc_authorized = nc_stats.get("authorized_count", 0)
 

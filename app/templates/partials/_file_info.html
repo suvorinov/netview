@@ -17,4 +17,6 @@
         <span class="font-medium ml-1" title="{{ file_info.size }} B">{{ file_info.size|human_size }}</span>
     </div>
 </div>
+{% else %}
+<span class="text-gray-400 text-xs">Информация недоступна</span>
 {% endif %}

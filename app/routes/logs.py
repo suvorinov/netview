@@ -96,7 +96,7 @@ def api_file_info():
         return render_template("partials/_file_info.html", file_info=info)
     except RequestException as e:
         logger.error("LogSpy API (file info) error: %s", e)
-        return '<span class="text-gray-400 text-xs">Информация недоступна</span>'
+        return render_template("partials/_file_info.html", file_info=None)
 
 
 @logs_bp.route("/api/data")

@@ -41,6 +41,7 @@ source_not/destination_not валят валидацию — поля прост
 """
 
 import logging
+import time
 import uuid as uuid_lib
 
 import requests
@@ -70,6 +71,44 @@ SHAPE_SEQUENCE = 90
 # MAC»: netview_mac_<MACHEX> и правила netview-block-<MACHEX>). Такие
 # остатки переносятся в общий алиас и удаляются при первом использовании.
 LEGACY_ALIAS_PREFIX = "netview_mac_"
+
+# Повторы при транзиентных сетевых сбоях (нет соединения/таймаут).
+# Шлюз-блокировка — критичная операция: одну повторную попытку с
+# экспоненциальной паузой надёжность оправдывает. Все операции шлюза
+# идемпотентны по устройству (setItem/reconfigure/apply), поэтому
+# повтор на сетевой ошибке безопасен. HTTP-ошибки (4xx/5xx) и ошибки
+# формы ответа НЕ повторяются — это не «шум сети», а настоящий ответ
+# API, и слепой повтор здесь не поможет.
+OPNSENSE_RETRIES = 1
+OPNSENSE_RETRY_BASE_DELAY = 0.3
+
+
+def _retry_transient(fn):
+    """Выполнить сетевой вызов с одним повтором на транзиентную ошибку.
+
+    Повторяется только requests.ConnectionError/requests.Timeout —
+    «сеть дёрнулась». Ошибки формы ответа/OPNsenseError пробрасываются
+    сразу: повтор бессмыслен.
+
+    Args:
+        fn: Callable, выполняющий один HTTP-запрос.
+
+    Returns:
+        Результат fn().
+    """
+    attempt = 0
+    while True:
+        try:
+            return fn()
+        except requests.RequestException as e:
+            # Network-уровень: стоит повторить. HTTP-статусы приходят
+            # изнутри raise_for_status как HTTPError — они НЕ транзиентны.
+            if attempt >= OPNSENSE_RETRIES or not isinstance(
+                e, requests.ConnectionError | requests.Timeout
+            ):
+                raise
+            attempt += 1
+            time.sleep(OPNSENSE_RETRY_BASE_DELAY * attempt)
 
 
 class OPNsenseError(Exception):
@@ -110,8 +149,12 @@ class OPNsenseClient(BaseApiClient):
     # ── низкоуровневые помощники ────────────────────────────────
     def _get(self, path: str):
         try:
-            resp = self._session.get(
-                f"{self.base_url}{path}", timeout=self.timeout, auth=self._auth
+            resp = _retry_transient(
+                lambda: self._session.get(
+                    f"{self.base_url}{path}",
+                    timeout=self.timeout,
+                    auth=self._auth,
+                )
             )
             resp.raise_for_status()
             if not resp.content:
@@ -124,8 +167,12 @@ class OPNsenseClient(BaseApiClient):
         """POST с form-urlencoded (API OPNsense принимает именно это)."""
         try:
             kwargs = {"data": data, "auth": self._auth}
-            resp = self._session.post(
-                f"{self.base_url}{path}", timeout=self.timeout, **kwargs
+            resp = _retry_transient(
+                lambda: self._session.post(
+                    f"{self.base_url}{path}",
+                    timeout=self.timeout,
+                    **kwargs,
+                )
             )
             resp.raise_for_status()
             if not resp.content:
@@ -142,11 +189,13 @@ class OPNsenseClient(BaseApiClient):
         "Undefined index: uuid" (проверено на живом шлюзе).
         """
         try:
-            resp = self._session.post(
-                f"{self.base_url}{path}",
-                json=obj,
-                auth=self._auth,
-                timeout=self.timeout,
+            resp = _retry_transient(
+                lambda: self._session.post(
+                    f"{self.base_url}{path}",
+                    json=obj,
+                    auth=self._auth,
+                    timeout=self.timeout,
+                )
             )
             resp.raise_for_status()
             if not resp.content:
@@ -158,11 +207,13 @@ class OPNsenseClient(BaseApiClient):
     def _post_no_body(self, path: str):
         """POST без тела: lighttpd шлюза требует Content-Length: 0."""
         try:
-            resp = self._session.post(
-                f"{self.base_url}{path}",
-                auth=self._auth,
-                timeout=self.timeout,
-                headers={"Content-Length": "0"},
+            resp = _retry_transient(
+                lambda: self._session.post(
+                    f"{self.base_url}{path}",
+                    auth=self._auth,
+                    timeout=self.timeout,
+                    headers={"Content-Length": "0"},
+                )
             )
             resp.raise_for_status()
             if not resp.content:

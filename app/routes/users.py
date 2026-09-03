@@ -6,10 +6,7 @@
 
 import logging
 import re
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import Any
 
 from flask import (
     Blueprint,
@@ -21,39 +18,11 @@ from flask import (
 from requests import RequestException
 
 from app.api.factories import get_logspy_client
-from app.utils import format_duration, human_size
+from app.utils import format_duration, human_size, run_in_parallel
 
 users_bp = Blueprint("users", __name__)
 
 logger = logging.getLogger(__name__)
-
-
-def _run_parallel(tasks: dict[str, Callable[[], Any]]) -> dict[str, Any]:
-    """Выполнить независимые запросы к сервису параллельно.
-
-    Страница пользователя делает до четырёх запросов к LogSpy;
-    последовательно на медленном сервисе это 1–3 секунды ожидания.
-    Параллельный запуск сокращает время страницы до одного таймаута.
-
-    Args:
-        tasks: {имя задачи: функция запроса}. Имя попадает в лог.
-
-    Returns:
-        {имя задачи: результат}; при сетевой ошибке результат None
-        (ошибка залогирована). Не-сетевые исключения не глушатся:
-        ошибка формы данных — наш баг и должен падать громко.
-    """
-    results: dict[str, Any] = {}
-    with ThreadPoolExecutor(max_workers=max(1, len(tasks))) as pool:
-        futures = {pool.submit(fn): name for name, fn in tasks.items()}
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                results[name] = future.result()
-            except RequestException as e:
-                logger.error("LogSpy API (%s) error: %s", name, e)
-                results[name] = None
-    return results
 
 
 def _get_user_upn(user: dict) -> str:
@@ -144,10 +113,13 @@ def detail(username: str):
     unavailable_services: set[str] = set()
 
     # Профиль и текущий лог-файл независимы — параллельно.
-    first = _run_parallel({
-        "ad_user": lambda: client.get_ad_user(username),
-        "logs_list": client.get_current_log,
-    })
+    first = run_in_parallel(
+        {
+            "ad_user": lambda: client.get_ad_user(username),
+            "logs_list": client.get_current_log,
+        },
+        service="LogSpy",
+    )
     user = first["ad_user"]
     if user is None:
         # LogSpy не отдал профиль (в т.ч. 404) — страницы пользователя нет.
@@ -165,14 +137,17 @@ def detail(username: str):
 
     if current_log:
         # Записи за выборку и серверная статистика независимы — параллельно.
-        second = _run_parallel({
-            "user_records": lambda: client.get_data(
-                current_log, user=user_upn, limit=500
-            ),
-            "user_activity": lambda: client.get_ad_user_activity(
-                user_upn, current_log
-            ),
-        })
+        second = run_in_parallel(
+            {
+                "user_records": lambda: client.get_data(
+                    current_log, user=user_upn, limit=500
+                ),
+                "user_activity": lambda: client.get_ad_user_activity(
+                    user_upn, current_log
+                ),
+            },
+            service="LogSpy",
+        )
         if any(result is None for result in second.values()):
             unavailable_services.add("LogSpy")
 
@@ -371,12 +346,15 @@ def export_blocked_report(username: str):
     time_on_blocked: float | None = None
     if log_file:
         # Записи блокировок и серверная статистика независимы — параллельно.
-        results = _run_parallel({
-            "blocked_records": lambda: client.get_data(
-                log_file, user=user_upn, status="blocked", limit=500
-            ),
-            "activity": lambda: client.get_ad_user_activity(user_upn, log_file),
-        })
+        results = run_in_parallel(
+            {
+                "blocked_records": lambda: client.get_data(
+                    log_file, user=user_upn, status="blocked", limit=500
+                ),
+                "activity": lambda: client.get_ad_user_activity(user_upn, log_file),
+            },
+            service="LogSpy",
+        )
 
         data = results["blocked_records"]
         if data is not None:
